@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="app-token" content="{{ token }}">
+  <meta name="theme-color" content="#173e32">
+  <title>Leaf Lab — รู้จักใบ เข้าใจพืช</title>
+  <link rel="icon" href="{{ url_for('static', filename='leaf.svg') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='camera.css') }}">
+  <script src="{{ url_for('static', filename='camera.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="#analyze"><img src="/static/leaf.svg" alt="" width="40" height="40"><span>leaf<span class="brand-light">lab</span><small>PLANT INTELLIGENCE</small></span></a>
+    <div class="nav-label">พื้นที่ทำงาน</div>
+    <nav aria-label="เมนูหลัก">
+      <button class="nav-item active" data-view="analyze"><span class="nav-icon">⌕</span> วิเคราะห์ใบพืช <span class="nav-arrow">↗</span></button>
+      <button class="nav-item" data-view="library"><span class="nav-icon">▦</span> สำรวจชุดข้อมูล</button>
+      <button class="nav-item" data-view="model"><span class="nav-icon">◈</span> โมเดลของฉัน</button>
+    </nav>
+    <div class="sidebar-bottom"><div class="local-indicator"><span class="dot"></span> ทำงานบนเครื่องของคุณ</div><p>ภาพที่เลือกจะประมวลผลในเครื่อง<br>ไม่ส่งภาพไปบริการภายนอก</p><div class="sidebar-footer">PLANTVILLAGE DATASET <span>↗</span></div></div>
+  </aside>
+  <main>
+    <header class="topbar"><div><span class="breadcrumb">พื้นที่ทำงาน</span><span class="slash">/</span><span id="page-label">วิเคราะห์ใบพืช</span></div><button id="model-pill" class="status-pill" data-view="model"><span class="dot"></span><span id="pill-text">กำลังตรวจโมเดล</span></button></header>
+    <div class="content">
+      <section id="view-analyze" class="view">
+        <div class="page-heading"><div class="eyebrow"><span></span> A CLOSER LOOK AT YOUR PLANTS</div><h1>รู้จักใบ <span>เข้าใจพืช.</span></h1><p>เริ่มจากภาพใบพืชหนึ่งใบ สำรวจสิ่งที่โมเดลมองเห็น</p></div>
+        <div class="stats-strip"><div><strong id="stat-crops">—</strong><span>ชนิดพืช</span></div><div><strong id="stat-classes">—</strong><span>กลุ่มพืชและอาการ</span></div><div><strong id="stat-images">—</strong><span>ภาพในชุดข้อมูล</span></div><div class="stats-note"><span class="mini-leaf">↗</span><span>เรียนรู้จากข้อมูลจริง<br><b>PlantVillage</b></span></div></div>
+        <div id="no-model" class="notice" hidden>ยังไม่มีโมเดลสำหรับวิเคราะห์ภาพ <button class="text-button" data-view="model">ไปฝึกโมเดล →</button></div>
+        <div class="analysis-grid">
+          <section class="panel upload-panel"><div class="panel-heading"><h2><span class="step">01</span> เพิ่มภาพใบพืช</h2><span class="subtle">JPG · PNG · WebP</span></div>
+            <div class="input-modes" role="group" aria-label="แหล่งภาพ">
+              <button id="mode-file" class="input-mode active" aria-pressed="true">เลือกไฟล์</button>
+              <button id="mode-camera" class="input-mode" aria-pressed="false">ใช้กล้อง</button>
+            </div>
+            <div id="file-input-panel">
+            <label class="drop-zone" id="drop-zone" tabindex="0" role="button" aria-label="เลือกหรือลากภาพใบพืช"><input id="image-input" type="file" accept="image/jpeg,image/png,image/webp" hidden><span class="upload-art"><svg viewBox="0 0 80 80" aria-hidden="true"><path d="M24 56C8 21 46 11 63 13c3 28-7 53-31 47"/><path d="M20 67c8-19 16-29 32-40M31 46l-5-16M39 36l16 1"/></svg><span>＋</span></span><strong>วางภาพใบพืชที่นี่</strong><span>หรือ <b>เลือกไฟล์จากเครื่อง</b></span><small>ขนาดไม่เกิน 8 MB · ถ่ายให้เห็นใบชัดเจน</small></label>
+            <div id="preview" class="preview" hidden><img id="preview-image" alt="ภาพใบพืชที่เลือก"><div class="preview-caption"><div><strong id="file-name"></strong><small id="file-detail"></small></div><button id="clear-image" class="icon-button" aria-label="ล้างภาพ">×</button></div></div>
+            </div>
+            <div id="camera-input-panel" hidden>
+              <div class="camera-stage" id="camera-stage">
+                <video id="camera-video" autoplay muted playsinline aria-label="ภาพสดจากกล้อง"></video>
+                <div id="camera-placeholder"><span>◉</span><strong>มองใบพืชผ่านกล้อง</strong><small>กดเปิดกล้องเพื่อเริ่มต้น</small></div>
+                <div id="camera-guide" hidden aria-hidden="true"><span>พื้นที่วิเคราะห์</span></div>
+                <span id="camera-live" class="camera-live" hidden><span class="dot"></span> ภาพสด</span>
+              </div>
+              <div class="camera-toolbar"><button id="camera-open" class="secondary-button">เปิดกล้อง</button><button id="camera-stop" class="secondary-button" disabled>ปิดกล้อง</button></div>
+              <label class="camera-device-label" for="camera-device">กล้องที่ใช้</label>
+              <select id="camera-device" disabled><option value="">เลือกกล้องอัตโนมัติ</option></select>
+              <p id="camera-message" class="camera-message" role="status">เปิดกล้องแล้วอนุญาตการเข้าถึงในเบราว์เซอร์ ใช้ภาพอย่างเดียว ไม่ใช้ไมโครโฟน</p>
+              <div class="camera-auto-controls"><button id="camera-auto" class="secondary-button" aria-pressed="false" disabled>เริ่มวิเคราะห์ต่อเนื่อง</button><label for="camera-interval">เว้นช่วง<select id="camera-interval"><option value="2000">2 วินาที</option><option value="3000" selected>3 วินาที</option><option value="5000">5 วินาที</option></select></label></div>
+              <p id="camera-auto-status" class="camera-auto-status" role="status">จัดใบเดียวให้อยู่ในกรอบ แล้วเลือกวิเคราะห์ครั้งเดียวหรือต่อเนื่อง</p>
+            </div>
+            <p class="photo-tip"><span>☀</span> ใช้ภาพใบเดียว แสงสม่ำเสมอ และพื้นหลังเรียบ</p>
+            <button class="primary-button" id="analyze-button" disabled><span>วิเคราะห์ภาพ</span><span>↗</span></button>
+          </section>
+          <section class="panel result-panel" aria-live="polite"><div class="panel-heading"><h2><span class="step">02</span> ผลการวิเคราะห์</h2><span id="result-tag" class="tag">รอภาพของคุณ</span></div>
+            <div id="result-empty" class="result-empty"><div class="result-orbit"><span>✳</span></div><h3>ทุกใบมีเรื่องราว</h3><p>เลือกภาพแล้วกดวิเคราะห์<br>ผลที่ใกล้เคียงที่สุดจะปรากฏที่นี่</p><div class="empty-rule"></div><small>เปรียบเทียบกับ 38 กลุ่มพืชและอาการ</small></div>
+            <div id="result-loading" class="result-empty" hidden><div class="spinner"></div><h3>กำลังอ่านภาพของคุณ</h3><p>ประมวลผลบนเครื่องนี้…</p></div>
+            <div id="result-content" hidden><div id="result-warning" class="result-warning"></div><div id="camera-result-info" class="camera-result-info" hidden><img id="camera-result-image" alt="ภาพในกรอบที่ใช้วิเคราะห์ล่าสุด"><div><strong>ภาพจากกล้องที่วิเคราะห์ล่าสุด</strong><span id="camera-result-time"></span></div></div><div class="prediction-main"><div class="eyebrow">ผลที่ได้คะแนนสูงสุด</div><h3 id="pred-disease"></h3><p id="pred-crop"></p><code id="pred-label"></code></div><div class="ranking-label">3 ผลลัพธ์ที่ใกล้เคียง <span>คะแนนโมเดล</span></div><div id="candidates"></div><p class="result-footnote">คะแนนนี้ไม่ใช่โอกาสยืนยันโรค โมเดลเลือกจากกลุ่มที่รู้จักเสมอ และยังแยกภาพที่ไม่ใช่ใบพืชไม่ได้</p><div id="sample-note" class="sample-note" hidden></div><button id="download-result" class="secondary-button">บันทึกผลวิเคราะห์ ↓</button></div>
+          </section>
+        </div>
+        <div class="samples-heading"><div><h2>ลองสำรวจจากภาพตัวอย่าง</h2><p>เลือกภาพเพื่อทดลองการทำงานของโมเดล</p></div><button class="text-button" data-view="library">ดูชุดข้อมูลทั้งหมด <span>↗</span></button></div>
+        <div id="quick-samples" class="quick-samples"></div>
+        <div class="context-note"><span>ⓘ</span><p>โมเดลเริ่มต้นสำหรับการเรียนรู้ ฝึกจากภาพใบพืชในชุดข้อมูลควบคุม ผลกับภาพถ่ายในสวนอาจแตกต่าง ควรตรวจสอบอาการจริงประกอบเสมอ</p></div>
+      </section>
+      <section id="view-library" class="view" hidden><div class="page-heading"><div class="eyebrow">THE PLANT COLLECTION</div><h1>สำรวจ<span>ชุดข้อมูล.</span></h1><p>ภาพใบพืชพร้อมป้ายกำกับจาก PlantVillage</p></div><div class="library-toolbar"><label for="class-filter">เลือกพืชและอาการ</label><select id="class-filter"><option value="">ทุกกลุ่ม — ภาพตัวอย่างกลุ่มละ 1 ภาพ</option></select><span id="library-count" class="subtle"></span></div><div id="library-grid" class="library-grid"></div><div class="pagination"><button id="prev-page" class="secondary-button">← ก่อนหน้า</button><span id="page-number"></span><button id="next-page" class="secondary-button">ถัดไป →</button></div></section>
+      <section id="view-model" class="view" hidden><div class="page-heading"><div class="eyebrow">YOUR LOCAL MODEL</div><h1>โมเดล<span>ของฉัน.</span></h1><p>ฝึกจากข้อมูลในเครื่อง และวัดผลกับภาพที่ไม่ได้ใช้ฝึก</p></div><div class="model-grid"><section class="panel model-card"><div class="panel-heading"><h2>สถานะและผลทดสอบ</h2><span class="tag" id="model-stage">—</span></div><div id="model-metrics" class="model-metrics"><p>ยังไม่มีผลทดสอบ</p></div><p class="model-explanation">แบ่งชุดทดสอบตามรหัสใบก่อนสุ่มภาพ โดยใช้ประมาณ 20% ของกลุ่มใบในแต่ละคลาส ภาพที่ไม่มีรหัสใบจะจัดกลุ่มจากชื่อภาพ จึงยังรับประกันไม่ได้ว่าเป็นคนละใบจริงทั้งหมด</p><p class="model-explanation">ความแม่นยำนี้วัดจากชุดทดสอบย่อยใน PlantVillage ไม่ใช่ความแม่นยำกับภาพถ่ายทั่วไป คะแนนต่อภาพยังไม่ได้ปรับเทียบเป็นความน่าจะเป็นของโรค</p></section><section class="panel model-card"><h2>ฝึกโมเดลบนเครื่องนี้</h2><p class="subtle">ใช้ภาพสีที่มีอยู่แล้ว ไม่ต้องดาวน์โหลดชุดข้อมูลใหม่</p><label for="training-size" class="field-label">จำนวนภาพฝึกสูงสุดต่อกลุ่ม</label><select id="training-size"><option value="150">150 ภาพ · ทดลองแบบเร็ว</option><option value="300" selected>300 ภาพ · ค่าเริ่มต้น</option><option value="600">600 ภาพ · ใช้เวลามากขึ้น</option></select><button id="train-button" class="primary-button">ฝึกโมเดล <span>↗</span></button><div id="training-progress" hidden><div class="progress-track"><div id="progress-fill"></div></div><p id="progress-message" role="status"></p></div><p class="model-explanation">การฝึกใช้ CPU และอาจใช้เวลาหลายนาที เปิดหน้าต่างโปรแกรมไว้จนเสร็จ โมเดลเดิมยังใช้ได้ระหว่างฝึก และจะถูกแทนที่เมื่อฝึกสำเร็จ</p></section></div><section class="panel report-panel" id="class-report" hidden><h2>ผลทดสอบแยกตามกลุ่ม</h2><div class="table-scroll"><table><thead><tr><th>พืชและอาการ</th><th>Precision</th><th>Recall</th><th>F1</th><th>ภาพทดสอบ</th></tr></thead><tbody id="report-body"></tbody></table></div></section></section>
+      <footer class="footer"><span>leaflab <span class="footer-dot">·</span> เครื่องมือเรียนรู้โรคพืชจากภาพ</span><span>LOCAL FIRST. GROW WITH CURIOSITY.</span></footer>
+    </div>
+  </main>
+  <div id="toast" class="toast" role="alert" hidden></div>
+</body>
+</html>
