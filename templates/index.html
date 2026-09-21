@@ -54,13 +54,24 @@
               <div class="camera-auto-controls"><button id="camera-auto" class="secondary-button" aria-pressed="false" disabled>เริ่มวิเคราะห์ต่อเนื่อง</button><label for="camera-interval">เว้นช่วง<select id="camera-interval"><option value="2000">2 วินาที</option><option value="3000" selected>3 วินาที</option><option value="5000">5 วินาที</option></select></label></div>
               <p id="camera-auto-status" class="camera-auto-status" role="status">จัดใบเดียวให้อยู่ในกรอบ แล้วเลือกวิเคราะห์ครั้งเดียวหรือต่อเนื่อง</p>
             </div>
-            <p class="photo-tip"><span>☀</span> ใช้ภาพใบเดียว แสงสม่ำเสมอ และพื้นหลังเรียบ</p>
+            <p class="photo-tip"><span>☀</span> ใช้ภาพใบเดียว แสงสม่ำเสมอ และพื้นหลังเรียบ ทั้งไฟล์และกล้องใช้พื้นที่สี่เหลี่ยมกลางภาพ</p>
             <button class="primary-button" id="analyze-button" disabled><span>วิเคราะห์ภาพ</span><span>↗</span></button>
           </section>
           <section class="panel result-panel" aria-live="polite"><div class="panel-heading"><h2><span class="step">02</span> ผลการวิเคราะห์</h2><span id="result-tag" class="tag">รอภาพของคุณ</span></div>
             <div id="result-empty" class="result-empty"><div class="result-orbit"><span>✳</span></div><h3>ทุกใบมีเรื่องราว</h3><p>เลือกภาพแล้วกดวิเคราะห์<br>ผลที่ใกล้เคียงที่สุดจะปรากฏที่นี่</p><div class="empty-rule"></div><small>เปรียบเทียบกับ 38 กลุ่มพืชและอาการ</small></div>
             <div id="result-loading" class="result-empty" hidden><div class="spinner"></div><h3>กำลังอ่านภาพของคุณ</h3><p>ประมวลผลบนเครื่องนี้…</p></div>
-            <div id="result-content" hidden><div id="result-warning" class="result-warning"></div><div id="camera-result-info" class="camera-result-info" hidden><img id="camera-result-image" alt="ภาพในกรอบที่ใช้วิเคราะห์ล่าสุด"><div><strong>ภาพจากกล้องที่วิเคราะห์ล่าสุด</strong><span id="camera-result-time"></span></div></div><div class="prediction-main"><div class="eyebrow">ผลที่ได้คะแนนสูงสุด</div><h3 id="pred-disease"></h3><p id="pred-crop"></p><code id="pred-label"></code></div><div class="ranking-label">3 ผลลัพธ์ที่ใกล้เคียง <span>คะแนนโมเดล</span></div><div id="candidates"></div><p class="result-footnote">คะแนนนี้ไม่ใช่โอกาสยืนยันโรค โมเดลเลือกจากกลุ่มที่รู้จักเสมอ และยังแยกภาพที่ไม่ใช่ใบพืชไม่ได้</p><div id="sample-note" class="sample-note" hidden></div><button id="download-result" class="secondary-button">บันทึกผลวิเคราะห์ ↓</button></div>
+            <div id="result-content" hidden>
+              <div id="result-warning" class="result-warning"></div>
+              <div id="camera-result-info" class="camera-result-info" hidden>
+                <img id="camera-result-image" alt="พื้นที่สี่เหลี่ยมกลางภาพที่ใช้วิเคราะห์ล่าสุด">
+                <div><strong>ภาพจากกล้องที่วิเคราะห์ล่าสุด</strong><span id="camera-result-time"></span>
+                  <a id="download-camera-frame" class="text-button">บันทึกภาพที่ใช้วิเคราะห์ ↓</a>
+                  <span>บันทึกภาพเต็มเฟรม แล้วนำไปเลือกไฟล์เพื่อเทียบผลได้</span>
+                </div>
+              </div>
+              <div class="prediction-main"><div id="prediction-heading" class="eyebrow">ผลที่ได้คะแนนสูงสุด</div><h3 id="pred-disease"></h3><p id="pred-crop"></p><code id="pred-label"></code></div>
+              <div class="ranking-label">3 ผลลัพธ์ที่ใกล้เคียง <span>คะแนนโมเดล</span></div><div id="candidates"></div><p class="result-footnote">คะแนนนี้ไม่ใช่โอกาสยืนยันโรค โมเดลเลือกจากกลุ่มที่รู้จักเสมอ และยังแยกภาพที่ไม่ใช่ใบพืชไม่ได้</p><div id="sample-note" class="sample-note" hidden></div><button id="download-result" class="secondary-button">บันทึกผลวิเคราะห์ ↓</button>
+            </div>
           </section>
         </div>
         <div class="samples-heading"><div><h2>ลองสำรวจจากภาพตัวอย่าง</h2><p>เลือกภาพเพื่อทดลองการทำงานของโมเดล</p></div><button class="text-button" data-view="library">ดูชุดข้อมูลทั้งหมด <span>↗</span></button></div>

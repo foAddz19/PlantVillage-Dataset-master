@@ -68,6 +68,12 @@ class AppTests(unittest.TestCase):
         self.assertEqual(len(train), artifact["metadata"]["train_images"])
         self.assertEqual(len(test), artifact["metadata"]["test_images"])
         self.assertGreater(artifact["metadata"]["accuracy"], .5)
+        validation = artifact.get("blend_validation_manifest", [])
+        if validation:
+            groups = {r["group"] for r in validation}
+            self.assertFalse(groups & {r["group"] for r in train + test})
+            self.assertEqual(len(groups), len(validation))
+            self.assertEqual(len(validation), artifact["metadata"]["blend_validation"]["source_images"])
 
     def test_upload_predict_uses_image_pixels_not_filename(self):
         record = next(r for r in self.service.artifact["manifest"] if r["split"] == "test")

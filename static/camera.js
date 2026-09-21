@@ -118,7 +118,8 @@ class LeafCamera {
   updateGuide() {
     if (!this.active || !this.video.videoWidth || !this.video.videoHeight) return;
     const scale = Math.min(this.stage.clientWidth / this.video.videoWidth, this.stage.clientHeight / this.video.videoHeight);
-    const size = Math.min(this.video.videoWidth, this.video.videoHeight) * .8 * scale;
+    // Match the centered square used by ImageOps.fit on the server.
+    const size = Math.min(this.video.videoWidth, this.video.videoHeight) * scale;
     document.querySelector("#camera-guide").style.width = `${size}px`;
     document.querySelector("#camera-guide").style.height = `${size}px`;
   }
@@ -127,17 +128,19 @@ class LeafCamera {
     if (!this.active || this.video.readyState < 2 || !this.video.videoWidth || !this.video.videoHeight) {
       throw new Error("กล้องยังไม่มีภาพ กรุณารอสักครู่แล้วลองอีกครั้ง");
     }
-    const side = Math.min(this.video.videoWidth, this.video.videoHeight) * .8;
     const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = Math.min(640, Math.round(side));
+    canvas.width = this.video.videoWidth;
+    canvas.height = this.video.videoHeight;
     const context = canvas.getContext("2d");
     if (!context) throw new Error("เบราว์เซอร์ไม่สามารถจับภาพได้ กรุณาเปิดโปรแกรมใหม่");
-    context.drawImage(this.video, (this.video.videoWidth-side)/2, (this.video.videoHeight-side)/2,
-      side, side, 0, 0, canvas.width, canvas.height);
+    // Preserve the full frame. Uploads and camera frames share server preprocessing.
+    context.drawImage(this.video, 0, 0);
     const capturedAt = new Date().toISOString();
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", .9));
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
     if (!blob) throw new Error("จับภาพจากกล้องไม่สำเร็จ กรุณาลองอีกครั้ง");
-    return { blob, capturedAt, size: canvas.width };
+    if (blob.size > 8 * 1024 * 1024) throw new Error("ภาพจากกล้องใหญ่เกิน 8 MB กรุณาลดความละเอียดกล้องแล้วลองใหม่");
+    return { blob, capturedAt, width: canvas.width, height: canvas.height,
+      size: Math.min(canvas.width, canvas.height) };
   }
 
   stop(message = "ปิดกล้องแล้ว กดเปิดกล้องเมื่อต้องการใช้งาน") {

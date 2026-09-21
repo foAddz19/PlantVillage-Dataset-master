@@ -51,7 +51,7 @@
   left: 50%;
   transform: translate(-50%, -50%);
   border: 2px dashed #d5efb5;
-  border-radius: 10px;
+  border-radius: 0;
   pointer-events: none;
   box-shadow: 0 0 0 500px #10261b35;
 }
@@ -94,7 +94,10 @@
 #camera-interval { display: block; font-size: 12px; padding: 8px; margin-top: 4px; }
 .camera-auto-status { margin-bottom: 0; }
 .camera-result-info { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 7px; background: #f2f6ed; margin-bottom: 20px; }
-.camera-result-info img { width: 68px; height: 68px; border-radius: 5px; object-fit: contain; }
+.camera-result-info img { width: 68px; height: 68px; flex-shrink: 0; border-radius: 5px; object-fit: cover; }
+.camera-result-info > div { min-width: 0; }
+#download-camera-frame { display: inline-block; font-size: 12px; margin: 5px 0; }
+.camera-evaluation-note { grid-column: 1 / -1; }
 .camera-result-info strong { display: block; font-size: 12px; font-weight: 500; }
 .camera-result-info span { display: block; font-size: 11px; color: #849473; }
 @media (max-width: 420px) {

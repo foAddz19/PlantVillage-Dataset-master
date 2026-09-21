@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "test-results"
 OUTPUT.mkdir(exist_ok=True)
 manifest = json.loads((ROOT / "models" / "split_manifest.json").read_text(encoding="utf-8"))
+metrics = json.loads((ROOT / "models" / "metrics.json").read_text(encoding="utf-8"))
 held_out = next(row for row in manifest if row["split"] == "test")
 image_path = ROOT / "PlantVillage-Dataset-master" / "raw" / "color" / held_out["path"]
 
@@ -58,7 +59,10 @@ with sync_playwright() as playwright:
     page.screenshot(path=str(OUTPUT / "library.png"), full_page=True)
     page.locator('nav [data-view="model"]').click()
     expect(page.locator("#report-body tr")).to_have_count(38)
-    expect(page.locator("#model-metrics")).to_contain_text("82.9%")
+    expect(page.locator("#model-metrics")).to_contain_text(f"{metrics['accuracy'] * 100:.1f}%")
+    if metrics.get("camera_stress"):
+        expect(page.locator("#model-metrics")).to_contain_text(f"{metrics['camera_stress']['mean_accuracy'] * 100:.1f}%")
+        expect(page.locator(".camera-evaluation-note")).to_contain_text("ยังไม่ใช่ความแม่นยำจากกล้องจริง")
     page.screenshot(path=str(OUTPUT / "model.png"), full_page=True)
     # A server-rejected file must leave the UI usable for another upload.
     page.locator('nav [data-view="analyze"]').click()

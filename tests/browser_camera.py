@@ -1,7 +1,9 @@
 """Camera tests using a canvas-backed MediaStream; never opens real hardware."""
 import json
+import hashlib
 from pathlib import Path
 
+from PIL import Image
 from playwright.sync_api import expect, sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,15 +14,27 @@ URL = "http://127.0.0.1:8765"
 INSTRUMENT = """(() => {
   window.cameraRequests = [];
   window.cameraTracks = [];
+  // Chromium does not expose multipart file bytes through request.post_data_buffer.
+  // Observe the File passed to fetch, then forward that same request unchanged.
+  const originalFetch = window.fetch;
+  window.fetch = async (input, options) => {
+    if (input === '/api/predict' && options?.body instanceof FormData) {
+      const file = options.body.get('image');
+      const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+      window.sentImage = {type: file.type, hash: Array.from(new Uint8Array(digest),
+        byte => byte.toString(16).padStart(2, '0')).join('')};
+    }
+    return originalFetch(input, options);
+  };
   // A canvas stream avoids OS camera drivers while exercising video.play/capture for real.
   navigator.mediaDevices.getUserMedia = async constraints => {
     window.cameraRequests.push(constraints);
     const image = new Image();
     image.src = '/api/image?label=Apple___Apple_scab&index=0';
     await image.decode();
-    const canvas = document.createElement('canvas'); canvas.width=640; canvas.height=480;
+    const canvas = document.createElement('canvas'); canvas.width=960; canvas.height=720;
     const ctx=canvas.getContext('2d');
-    const draw=()=> {ctx.fillStyle='#ccc';ctx.fillRect(0,0,640,480);ctx.drawImage(image,128,48,384,384);};
+    const draw=()=> {ctx.fillStyle='#ccc';ctx.fillRect(0,0,960,720);ctx.drawImage(image,120,0,720,720);};
     draw();
     const stream=canvas.captureStream(10);
     const timer=setInterval(draw,100);
@@ -65,7 +79,8 @@ with sync_playwright() as playwright:
     expect(page.locator("#analyze-button")).to_be_enabled()
     assert page.locator("#camera-video").evaluate("video => video.videoWidth > 0")
     assert page.evaluate("window.cameraRequests.every(c => c.audio === false)")
-    page.get_by_role("button", name="วิเคราะห์ภาพจากกล้อง ↗", exact=True).click()
+    with page.expect_request("**/api/predict") as camera_request:
+        page.get_by_role("button", name="วิเคราะห์ภาพจากกล้อง ↗", exact=True).click()
     expect(page.locator("#camera-result-info")).to_be_visible()
     expect(page.locator("#candidates .candidate")).to_have_count(3)
     expect(page.locator("#camera-result-time")).to_contain_text("พิกเซล")
@@ -73,9 +88,51 @@ with sync_playwright() as playwright:
         page.get_by_role("button", name="บันทึกผลวิเคราะห์ ↓").click()
     download.value.save_as(str(OUTPUT / "camera-result.json"))
     result = json.loads((OUTPUT / "camera-result.json").read_text(encoding="utf-8"))
-    assert result["source"] == "camera" and result["captured_at"] and result["crop_size"] <= 640
-    assert page.locator("#camera-result-image").evaluate("img => img.naturalWidth === img.naturalHeight")
+    assert result["source"] == "camera" and result["captured_at"] and result["crop_size"] == 720
+    assert (result["frame_width"], result["frame_height"], result["frame_format"]) == (960, 720, "PNG")
+    assert page.locator("#camera-result-image").evaluate("img => img.naturalWidth === 960 && img.naturalHeight === 720")
+    assert page.locator("#camera-guide").evaluate("""guide => {
+      const video = document.querySelector('#camera-video');
+      const stage = document.querySelector('#camera-stage');
+      const expected = Math.min(video.videoWidth, video.videoHeight) *
+        Math.min(stage.clientWidth / video.videoWidth, stage.clientHeight / video.videoHeight);
+      return Math.abs(guide.getBoundingClientRect().width - expected) < 1;
+    }""")
+    with page.expect_download() as frame_download:
+        page.get_by_role("link", name="บันทึกภาพที่ใช้วิเคราะห์ ↓", exact=True).click()
+    frame_path = OUTPUT / "camera-frame.png"
+    frame_download.value.save_as(str(frame_path))
+    uploaded = page.evaluate("window.sentImage")
+    assert uploaded["type"] == "image/png"
+    assert hashlib.sha256(frame_path.read_bytes()).hexdigest() == uploaded["hash"], "Download must preserve the exact analyzed bytes"
+    with Image.open(frame_path) as frame_image:
+        assert frame_image.format == "PNG" and frame_image.size == (960, 720), "No extra camera crop or resize"
     page.screenshot(path=str(OUTPUT / "camera-desktop.png"), full_page=True)
+
+    # Feed the downloaded frame through the visible file-upload flow and real model.
+    page.get_by_role("button", name="เลือกไฟล์", exact=True).click()
+    expect(page.locator("#camera-result-info")).to_be_hidden()
+    assert page.locator("#download-camera-frame").get_attribute("href") is None
+    page.locator("#image-input").set_input_files(str(frame_path))
+    with page.expect_response("**/api/predict") as uploaded_response:
+        page.get_by_role("button", name="วิเคราะห์ภาพ ↗", exact=True).click()
+    repeated = uploaded_response.value.json()
+    for key in ("candidates", "uncertain", "model_created_at"):
+        assert repeated[key] == result[key], f"Camera/upload mismatch: {key}"
+    expect(page.locator("#result-tag")).to_have_text("วิเคราะห์เสร็จแล้ว")
+    page.get_by_role("button", name="ใช้กล้อง", exact=True).click()
+    page.get_by_role("button", name="เปิดกล้อง", exact=True).click()
+    expect(page.locator("#camera-live")).to_be_visible()
+
+    # Uncertain predictions must not appear as a confident plant/disease heading.
+    for uncertain in (True, False):
+        fixture = {**result, "uncertain": uncertain}
+        page.route("**/api/predict", lambda route: route.fulfill(json=fixture))
+        page.get_by_role("button", name="วิเคราะห์ภาพจากกล้อง ↗", exact=True).click()
+        expect(page.locator("#pred-disease")).to_have_text("ยังระบุไม่ได้" if uncertain else result["candidates"][0]["disease_th"])
+        expect(page.locator("#candidates .candidate")).to_have_count(3)
+        expect(page.locator("#analyze-button")).to_be_enabled()
+        page.unroute("**/api/predict")
 
     # Repeated frames go through the real inference endpoint, never concurrently.
     page.locator("#camera-interval").select_option("2000")
@@ -167,6 +224,8 @@ with sync_playwright() as playwright:
     late.close()
     browser.close()
     print(json.dumps({"fake_camera_capture": "passed", "real_model_inference": "passed",
+                      "exact_frame_download": "passed", "camera_upload_same_scores": "passed",
+                      "full_frame_and_guide": "passed", "uncertain_heading": "passed",
                       "continuous_frames": "passed", "max_concurrent_requests": max_active[0],
                       "cancel_inflight": "passed", "release_tracks": "passed", "permission_errors": "passed",
                       "late_permission_cancel": "passed", "mobile": "passed", "real_camera_used": False,

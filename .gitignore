@@ -4,6 +4,10 @@ __pycache__/
 models/*.joblib
 models/*.tmp
 models/training.lock
+models/camera-candidate/
+models/camera-blended/
+models/camera-refined/
+models/backups/
 runtime/
 test-results/
 

@@ -93,6 +93,8 @@ $("#clear-image").addEventListener("click", () => {
 function releaseCameraResult() {
   if (state.cameraResultUrl) URL.revokeObjectURL(state.cameraResultUrl);
   state.cameraResultUrl = null;
+  $("#download-camera-frame").removeAttribute("href");
+  $("#download-camera-frame").removeAttribute("download");
   $("#camera-result-image").removeAttribute("src");
   $("#camera-result-info").hidden = true;
 }
@@ -175,9 +177,10 @@ async function runAnalysis(automatic = false) {
     if (fromCamera) {
       frame = await camera.capture();
       if (requestId !== state.requestId) return;
-      const form = new FormData(); form.append("image", frame.blob, "camera-frame.jpg");
+      const form = new FormData(); form.append("image", frame.blob, "camera-frame.png");
       result = await api("/api/predict", { method: "POST", body: form, signal: controller.signal });
-      result = { ...result, source: "camera", captured_at: frame.capturedAt, crop_size: frame.size };
+      result = { ...result, source: "camera", captured_at: frame.capturedAt, crop_size: frame.size,
+        frame_width: frame.width, frame_height: frame.height, frame_format: "PNG" };
     } else if (state.sample) {
       result = await api("/api/predict-example", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ label: state.sample.label, index: state.sample.index }), signal: controller.signal });
@@ -186,14 +189,17 @@ async function runAnalysis(automatic = false) {
       result = await api("/api/predict", { method: "POST", body: form, signal: controller.signal });
     }
     if (requestId !== state.requestId) return;
-    state.result = { ...result, filename: fromCamera ? "camera-frame.jpg" : state.file ? state.file.name : "dataset-example",
+    state.result = { ...result, filename: fromCamera ? "camera-frame.png" : state.file ? state.file.name : "dataset-example",
       analyzed_at: new Date().toISOString() };
     renderResult(state.result);
     releaseCameraResult();
     if (frame) {
       state.cameraResultUrl = URL.createObjectURL(frame.blob);
       $("#camera-result-image").src = state.cameraResultUrl;
-      $("#camera-result-time").textContent = `${new Date(frame.capturedAt).toLocaleTimeString("th-TH")} · ${frame.size} × ${frame.size} พิกเซล`;
+      $("#camera-result-time").textContent = `${new Date(frame.capturedAt).toLocaleTimeString("th-TH")} · ${frame.width} × ${frame.height} พิกเซล`;
+      // Download the very same Blob sent to inference, never capture another frame.
+      $("#download-camera-frame").href = state.cameraResultUrl;
+      $("#download-camera-frame").download = `leaflab-camera-${frame.capturedAt.replace(/[:.]/g, "-")}.png`;
       $("#camera-result-info").hidden = false;
       if (state.auto) $("#camera-auto-status").textContent = `อัปเดตแล้ว · รอ ${Number($("#camera-interval").value) / 1000} วินาทีก่อนวิเคราะห์ภาพถัดไป`;
     }
@@ -216,9 +222,12 @@ $("#analyze-button").addEventListener("click", () => runAnalysis());
 function renderResult(result) {
   $("#result-content").hidden = false; $("#result-tag").textContent = "วิเคราะห์เสร็จแล้ว";
   const best = result.candidates[0];
-  $("#pred-disease").textContent = best.disease_th; $("#pred-crop").textContent = best.crop_th;
-  $("#pred-label").textContent = best.label;
-  $("#result-warning").textContent = result.uncertain ? "ผลยังไม่ชัดเจน · ลองถ่ายใหม่ให้เห็นใบเต็มใบ และเปรียบเทียบหลายอาการ" : "ผลคาดการณ์เบื้องต้น · ควรตรวจอาการจริงประกอบ";
+  $("#prediction-heading").textContent = result.uncertain ? "ผลยังไม่ชัดเจน" : "ผลที่ได้คะแนนสูงสุด";
+  $("#pred-disease").textContent = result.uncertain ? "ยังระบุไม่ได้" : best.disease_th;
+  $("#pred-crop").textContent = result.uncertain ? "กรุณาถ่ายใหม่ให้เห็นใบเต็มใบในกรอบ" : best.crop_th;
+  $("#pred-label").textContent = result.uncertain ? "" : best.label;
+  $("#pred-label").hidden = result.uncertain;
+  $("#result-warning").textContent = result.uncertain ? "คะแนนยังไม่ชัดเจน · รายการด้านล่างเป็นเพียงกลุ่มที่ได้คะแนนใกล้เคียง" : "ผลคาดการณ์เบื้องต้น · ควรตรวจอาการจริงประกอบ";
   $("#candidates").replaceChildren();
   result.candidates.forEach(item => {
     const row = document.createElement("div"); row.className = "candidate";
@@ -272,6 +281,14 @@ function renderMetadata(metadata) {
   if (!metadata || state.lastModel === metadata.created_at) return;
   state.lastModel = metadata.created_at;
   $("#model-metrics").replaceChildren(metric(percent(metadata.accuracy), "ทำนายอันดับ 1 ถูกต้อง"), metric(percent(metadata.top3_accuracy), "คำตอบจริงอยู่ใน 3 อันดับ"), metric(number(metadata.train_images), "ภาพที่ใช้ฝึก"), metric(number(metadata.test_images), "ภาพที่ใช้ทดสอบ"));
+  if (metadata.camera_stress) {
+    $("#model-metrics").append(metric(percent(metadata.camera_stress.mean_accuracy), "ภาพดัดแปลงจำลองกล้อง"),
+      metric(number(metadata.augmented_images), "ภาพดัดแปลงที่เพิ่มในการฝึก"));
+    const note = document.createElement("p"); note.className = "model-explanation camera-evaluation-note";
+    const before = metadata.comparison?.baseline_camera_stress?.mean_accuracy;
+    note.textContent = `${before == null ? "" : `โมเดลก่อนหน้าได้ ${percent(before)} บนภาพจำลองชุดเดียวกัน · `}ทดสอบแสง สี มุม และความคมชัดที่เปลี่ยนไปจากภาพ ${number(metadata.camera_stress.source_images)} ภาพที่แยกไว้ ผลนี้ยังไม่ใช่ความแม่นยำจากกล้องจริง`;
+    $("#model-metrics").append(note);
+  }
   const date = document.createElement("div"); date.className = "model-date";
   date.textContent = `${metadata.algorithm} · ฝึกเมื่อ ${new Date(metadata.created_at).toLocaleString("th-TH")} · ใช้เวลา ${Math.round(metadata.seconds)} วินาที`;
   $("#model-metrics").append(date); $("#class-report").hidden = false; $("#report-body").replaceChildren();
