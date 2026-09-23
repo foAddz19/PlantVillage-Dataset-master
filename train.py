@@ -6,6 +6,7 @@ from leaflab.dataset import Catalog
 from leaflab.model import train_model
 from pathlib import Path
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--samples-per-class", type=int, choices=(150, 300, 600), default=300)
