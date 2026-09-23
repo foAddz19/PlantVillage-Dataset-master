@@ -9,6 +9,7 @@ models/camera-blended/
 models/camera-refined/
 models/backups/
 runtime/
+data/
 test-results/
 
 .venv/

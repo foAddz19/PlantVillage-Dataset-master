@@ -11,11 +11,12 @@ from urllib.parse import urlencode
 from flask import Flask, jsonify, render_template, request, send_file
 from werkzeug.exceptions import HTTPException
 
-from leaflab.dataset import Catalog
+from leaflab.dataset import Catalog, ROOT
 from leaflab.model import ModelService, read_image
+from leaflab.device import device_routes
 
 
-def create_app(catalog=None, service=None):
+def create_app(catalog=None, service=None, data_dir=None):
     app = Flask(__name__)
     app.config.update(MAX_CONTENT_LENGTH=9 * 1024 * 1024,
                       TRUSTED_HOSTS=["127.0.0.1", "localhost", "[::1]"])
@@ -23,6 +24,7 @@ def create_app(catalog=None, service=None):
     service = service if service is not None else ModelService(catalog)
     token = secrets.token_urlsafe(32)
     app.extensions["model_service"] = service
+    app.register_blueprint(device_routes(service, token, data_dir or ROOT / "data"))
 
     @app.before_request
     def protect_local_actions():
@@ -39,6 +41,10 @@ def create_app(catalog=None, service=None):
             "default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; "
             "script-src 'self'; connect-src 'self'; media-src 'self' blob:; "
             "frame-ancestors 'none'; form-action 'self'; base-uri 'self'")
+        if request.path == "/device":
+            response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+            response.headers["Content-Security-Policy"] = response.headers["Content-Security-Policy"].replace(
+                "img-src 'self' blob: data:", "img-src 'self' blob: data: https://tile.openstreetmap.org")
         if request.path.startswith("/api/") and request.path != "/api/image":
             response.headers["Cache-Control"] = "no-store"
         return response
@@ -171,13 +177,15 @@ def main():
     parser = argparse.ArgumentParser(description="Leaf Lab — local plant image classifier")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--open-browser", action="store_true")
+    parser.add_argument("--device", action="store_true", help="Open the PC device simulator")
     args = parser.parse_args()
-    url = f"http://127.0.0.1:{args.port}"
+    base_url = f"http://127.0.0.1:{args.port}"
+    url = base_url + ("/device" if args.device else "")
     if args.open_browser:
         import json
         from urllib.request import urlopen
         try:
-            with urlopen(url + "/api/health", timeout=1) as response:
+            with urlopen(base_url + "/api/health", timeout=1) as response:
                 if json.load(response).get("app") == "leaf-lab":
                     webbrowser.open(url)
                     return

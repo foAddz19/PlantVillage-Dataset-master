@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="app-token" content="{{ token }}"><meta name="theme-color" content="#123f36">
+  <title>Plant Doctor · เครื่องตรวจจำลอง</title>
+  <link rel="icon" href="/static/leaf.svg"><link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/static/device.css">
+  <script src="/static/vendor/leaflet/leaflet.js" defer></script><script src="/static/device.js" defer></script>
+</head>
+<body>
+  <header class="top"><a class="brand" href="/device"><img src="/static/leaf.svg" alt="">PLANT <b>DOCTOR</b><span>FIELD LAB / 01</span></a><div class="top-actions"><a href="/">ห้องทดลอง AI</a><button id="fullscreen">เต็มหน้าจอ ↗</button></div></header>
+  <main>
+    <div class="intro"><div><span class="eyebrow">SMART AGRICULTURE · PC SIMULATOR</span><h1>เครื่องตรวจโรคพืช<span>พร้อมแผนที่.</span></h1><p>ทดลองถ่ายภาพ ตรวจด้วย AI และบันทึกจุดสำรวจ ก่อนต่อ Raspberry Pi 5</p></div><span class="mode-badge">● โหมดจำลองบนคอมพิวเตอร์</span></div>
+    <div class="device-shell">
+      <div class="device-status"><span id="ai-status">● กำลังโหลด AI</span><span id="gps-status">GPS จำลอง</span><span id="led-status">ไฟจำลอง: ปิด</span><span id="battery-status">แบตจำลอง 80%</span></div>
+      <nav class="tabs" aria-label="หน้าจอเครื่องตรวจ"><button data-tab="capture" class="active" aria-pressed="true">◉ ตรวจใบพืช</button><button data-tab="map" aria-pressed="false">⌖ แผนที่จุดตรวจ</button><button data-tab="history" aria-pressed="false">▤ ประวัติ</button><button data-tab="settings" aria-pressed="false">⚙ ตั้งค่าจำลอง</button></nav>
+      <section id="screen-capture" class="screen">
+        <div class="capture-grid">
+          <div class="camera-panel"><div class="section-title"><h2>ภาพใบพืช</h2><span id="source-label">รอภาพ</span></div>
+            <div id="viewfinder"><video id="device-video" autoplay muted playsinline hidden></video><img id="device-preview" alt="ภาพใบพืชที่เลือก" hidden><div id="capture-guide" hidden><span>พื้นที่วิเคราะห์</span></div><div id="camera-empty"><span>⌗</span><strong>เริ่มสำรวจจากใบเดียว</strong><p>เปิดกล้อง เลือกไฟล์ หรือใช้ภาพทดลอง</p></div><span id="lamp" hidden>☀ LED จำลอง</span></div>
+            <div class="input-actions"><button id="open-camera">เปิดกล้อง</button><button id="close-camera" disabled>ปิดกล้อง</button><label class="button" for="device-file">เลือกไฟล์<input id="device-file" type="file" accept="image/jpeg,image/png,image/webp" hidden></label><button id="sample-image">ใช้ภาพทดลอง</button></div>
+            <p class="hint">วางใบเดียวให้เต็มสี่เหลี่ยมกลางภาพ ใช้แสงสม่ำเสมอและพื้นหลังเรียบ</p>
+          </div>
+          <div class="result-panel"><div class="section-title"><h2>ผลตรวจเบื้องต้น</h2><span id="result-state">ยังไม่ได้ตรวจ</span></div>
+            <div id="device-result-empty"><span>✳</span><h3>จากภาพ สู่จุดสำรวจ</h3><p>ผลตรวจจริงจากโมเดลในเครื่อง<br>พิกัดเริ่มต้นเป็นข้อมูลจำลอง</p></div>
+            <div id="device-result" hidden><div id="result-snapshot"><img id="analyzed-frame" alt="ภาพที่ใช้ตรวจ"><div><strong id="result-disease"></strong><span id="result-crop"></span><small id="result-time"></small></div></div><p id="uncertainty"></p><div id="device-candidates"></div><div class="capture-location"><span id="result-location"></span><small>พิกัด ณ ตอนส่งภาพตรวจ</small></div><label for="observer-severity">ความรุนแรงที่ผู้ตรวจประเมิน</label><select id="observer-severity"><option value="unassessed">ยังไม่ประเมิน</option><option value="mild">เล็กน้อย · ผู้ตรวจระบุ</option><option value="severe">รุนแรง · ผู้ตรวจระบุ</option></select><input id="scan-note" maxlength="500" placeholder="บันทึกเพิ่มเติม เช่น แปลง A แถว 3" aria-label="บันทึกเพิ่มเติม"><p class="hint">คะแนน AI ไม่ใช่โอกาสยืนยันโรคหรือระดับความรุนแรง</p></div>
+          </div>
+        </div>
+        <div class="primary-actions"><button id="analyze-scan" class="primary" disabled>◉ ถ่าย / ตรวจโรค</button><button id="save-scan" disabled>▣ บันทึกจุดตรวจ</button><button id="go-map">⌖ ดูแผนที่</button></div>
+      </section>
+      <section id="screen-map" class="screen" hidden>
+        <div class="section-title"><div><h2>แผนที่จุดตรวจ</h2><p id="map-mode">พิกัดออฟไลน์ · ยังไม่โหลดแผนที่ถนน</p></div><div class="map-buttons"><button id="fit-points">รวมทุกจุด</button><button id="online-map" aria-pressed="false">เปิดแผนที่ถนน (อินเทอร์เน็ต)</button></div></div>
+        <div class="map-layout"><div id="field-map" aria-label="แผนที่พิกัดจุดตรวจ"></div><aside><label for="map-filter">แหล่งพิกัด</label><select id="map-filter"><option value="all">ทุกจุด</option><option value="simulated">พิกัดจำลอง</option><option value="manual">พิกัดที่ระบุเอง</option></select><div class="legend"><span><i class="red"></i> ผู้ตรวจระบุรุนแรง</span><span><i class="yellow"></i> ผู้ตรวจระบุเล็กน้อย</span><span><i class="green"></i> AI คาดว่าใบปกติ</span><span><i class="gray"></i> ไม่ชัดเจน / ยังไม่ประเมิน</span></div><p id="map-count"></p><div id="map-list"></div></aside></div><p class="hint">วงแหวนเส้นประคือพิกัดปัจจุบัน ยังไม่ใช่รายการบันทึก · แผนที่ถนนโหลดจาก OpenStreetMap เมื่อกดเปิด ภาพใบพืชเก็บในเครื่อง</p>
+      </section>
+      <section id="screen-history" class="screen" hidden><div class="section-title"><div><h2>สมุดบันทึกการสำรวจ</h2><p id="history-count">กำลังโหลด</p></div><div class="export-actions"><a class="button" href="/api/device/export/csv" download>CSV ↓</a><a class="button" href="/api/device/export/geojson" download>GeoJSON ↓</a><button id="refresh-history">รีเฟรช</button></div></div><div id="history-list"></div><p class="hint">บันทึกอยู่ในฐานข้อมูลบนเครื่อง เปิดโปรแกรมใหม่ข้อมูลยังอยู่ พิกัดจำลองมีป้ายกำกับแยกจากพิกัดที่ระบุเอง</p></section>
+      <section id="screen-settings" class="screen" hidden><div class="settings-grid"><div><span class="eyebrow">LOCATION SIMULATOR</span><h2>ตำแหน่งที่ใช้กับภาพถัดไป</h2><p>พิกัดเริ่มต้นเป็นจุดสมมติในจังหวัดร้อยเอ็ด ไม่ได้อ่านจาก GPS จริง</p><label for="location-source">รูปแบบพิกัด</label><select id="location-source"><option value="simulated">GPS จำลอง</option><option value="manual">ระบุพิกัดเอง</option></select><div class="coordinate-fields"><label>ละติจูด<input id="latitude" type="number" min="-90" max="90" step="any" value="16.0530"></label><label>ลองจิจูด<input id="longitude" type="number" min="-180" max="180" step="any" value="103.6520"></label></div><button id="move-location">ขยับไปจุดจำลองถัดไป →</button><p class="hint">เปลี่ยนพิกัดในหน้านี้จะมีผลกับภาพที่ตรวจครั้งถัดไป ไม่เปลี่ยนพิกัดของผลที่ตรวจแล้ว</p></div><div><span class="eyebrow">HARDWARE SIMULATOR</span><h2>สถานะเครื่องต้นแบบ</h2><div class="hardware-row"><span>Raspberry Pi 5</span><b>ยังไม่ได้เชื่อมต่อ</b></div><div class="hardware-row"><span>กล้อง</span><b>เว็บแคม / ไฟล์บนคอม</b></div><div class="hardware-row"><span>ไฟส่องใบจำลอง</span><button id="toggle-led" aria-pressed="false">เปิด LED จำลอง</button></div><label for="battery">ระดับแบตเตอรี่จำลอง</label><input id="battery" type="range" min="0" max="100" value="80"><p>กล้องบนคอมและ AI ทำงานจริง ส่วน GPS, LED และแบตเตอรี่ในหน้านี้เป็นการจำลอง</p><a href="/">ดูโมเดลและผลทดสอบ AI →</a></div></div></section>
+      <footer class="device-footer"><span>LOCAL AI · SQLite · GPS SIMULATOR</span><span id="saved-count">0 จุดบันทึก</span></footer>
+    </div>
+    <p class="below-note">ต้นแบบซอฟต์แวร์สำหรับทดลองบนคอมพิวเตอร์ · การต่อกล้อง Raspberry Pi, GPS และวงจรจริงจะทดสอบเมื่ออุปกรณ์มาถึง</p>
+  </main><div id="device-message" role="status" aria-live="polite" hidden>พร้อมเริ่มสำรวจ</div>
+</body>
+</html>
