@@ -35,6 +35,17 @@ with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
             context = browser.new_context(viewport={"width": 1440, "height": 1100}, accept_downloads=True)
             context.add_init_script(FAKE_CAMERA)
             page = context.new_page()
+            # All basemap requests are intercepted before navigation: no requests to OSM.
+            tile_status = {"code": 200}
+            tile_requests = []
+            def map_tile(route):
+                tile_requests.append(route.request.url)
+                if tile_status["code"] == 200:
+                    route.fulfill(status=200, content_type="image/svg+xml",
+                                  body='<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#e0ead9"/><path d="M0 128H256 M128 0V256" stroke="white" stroke-width="8"/></svg>')
+                else:
+                    route.fulfill(status=tile_status["code"], content_type="text/plain", body="Map service unavailable")
+            page.route("https://tile.openstreetmap.org/**", map_tile)
             errors, external = [], []
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.on("request", lambda request: external.append(request.url) if request.url.startswith("http") and not request.url.startswith(URL) else None)
@@ -72,7 +83,13 @@ with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
             download.value.save_as(str(path))
             features=json.loads(path.read_text(encoding="utf-8"))["features"]
             assert len(features)==1 and features[0]["geometry"]["coordinates"]==[original["longitude"],original["latitude"]]
+            assert not external, external  # No basemap fetch until the map is opened.
             page.locator('[data-tab="map"]').click()
+            expect(page.locator("#map-mode")).to_have_attribute("data-state", "ready")
+            expect(page.locator("#online-map")).to_have_attribute("aria-pressed", "true")
+            expect(page.locator("#map-notice")).to_be_hidden()
+            expect(page.locator(".leaflet-control-attribution")).to_contain_text("OpenStreetMap")
+            assert tile_requests
             expect(page.locator("#map-count")).to_have_text("แสดง 1 จุดบันทึก")
             page.locator(".map-record").click()
             expect(page.locator(".leaflet-popup-content")).to_contain_text("แปลงทดลอง <script>alert(1)</script>")
@@ -80,14 +97,32 @@ with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
             expect(page.locator("#map-count")).to_have_text("แสดง 0 จุดบันทึก")
             page.locator("#map-filter").select_option("all")
             page.screenshot(path=str(OUTPUT/"device-map.png"), full_page=True)
-            assert not external, external
-            # Exercise online-map toggle with intercepted tile requests, never contact OSM in automated tests.
-            page.route("https://tile.openstreetmap.org/**", lambda route: route.fulfill(status=503, body="test offline"))
+            assert all(url.startswith("https://tile.openstreetmap.org/") for url in external), external
+            # Switching roads off keeps points and stays off when returning to this tab.
             page.locator("#online-map").click()
-            expect(page.locator("#online-map")).to_have_attribute("aria-pressed", "true")
-            expect(page.locator(".leaflet-control-attribution")).to_contain_text("OpenStreetMap")
-            page.locator("#online-map").click()
+            expect(page.locator("#map-mode")).to_have_attribute("data-state", "offline")
+            expect(page.locator("#map-notice")).to_be_visible()
+            page.locator('[data-tab="capture"]').click()
+            page.locator('[data-tab="map"]').click()
             expect(page.locator("#online-map")).to_have_attribute("aria-pressed", "false")
+            expect(page.locator("#map-count")).to_have_text("แสดง 1 จุดบันทึก")
+            # A fresh context has no decoded tiles cached from the successful view.
+            # Test failure and recovery without changing normal browser tile caching.
+            tile_status["code"] = 503
+            failure_context = browser.new_context()
+            failure_page = failure_context.new_page()
+            failure_page.on("pageerror", lambda error: errors.append(str(error)))
+            failure_page.route("https://tile.openstreetmap.org/**", map_tile)
+            failure_page.goto(URL+"/device", wait_until="networkidle")
+            failure_page.locator('[data-tab="map"]').click()
+            expect(failure_page.locator("#map-mode")).to_have_attribute("data-state", "error")
+            expect(failure_page.get_by_role("button", name="ลองโหลดใหม่", exact=True)).to_be_visible()
+            expect(failure_page.locator("#map-count")).to_have_text("แสดง 1 จุดบันทึก")
+            tile_status["code"] = 200
+            failure_page.locator("#retry-map").click()
+            expect(failure_page.locator("#map-mode")).to_have_attribute("data-state", "ready")
+            expect(failure_page.locator("#map-notice")).to_be_hidden()
+            failure_context.close()
             page.locator('[data-tab="capture"]').click()
             page.locator("#open-camera").click()
             expect(page.locator("#device-video")).to_be_visible()
@@ -103,6 +138,8 @@ with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
             assert page.evaluate("window.deviceTracks.every(t=>t.readyState==='ended')")
             expect(page.locator('path[fill="#d04f46"]')).to_have_count(1)
             page.set_viewport_size({"width": 800, "height": 480})
+            assert page.evaluate("document.documentElement.scrollWidth<=innerWidth")
+            expect(page.locator("#online-map")).to_be_visible()
             page.locator('[data-tab="capture"]').click()
             assert page.evaluate("document.documentElement.scrollWidth<=innerWidth")
             assert page.locator("#analyze-scan").bounding_box()["height"] >= 44
@@ -110,12 +147,19 @@ with tempfile.TemporaryDirectory(dir=ROOT) as temporary:
             page.set_viewport_size({"width": 390, "height": 844})
             assert page.evaluate("document.documentElement.scrollWidth<=innerWidth")
             page.screenshot(path=str(OUTPUT/"device-mobile.png"), full_page=True)
+            page.locator('[data-tab="map"]').click()
+            page.locator("#online-map").click()
+            expect(page.locator("#map-mode")).to_have_attribute("data-state", "ready")
+            assert page.evaluate("document.documentElement.scrollWidth<=innerWidth")
+            expect(page.locator("#online-map")).to_be_visible()
+            page.screenshot(path=str(OUTPUT/"device-map-mobile.png"), full_page=True)
             assert not errors, errors
             context.close()
             browser.close()
         print(json.dumps({"real_ai": "passed", "capture_save_map": "passed", "immutable_location": "passed",
                           "persistent_history": "passed", "geojson": "passed", "manual_severity": "passed",
-                          "fake_camera": "passed", "offline_map": "passed", "xss_escaped": "passed",
+                          "fake_camera": "passed", "offline_map": "passed", "automatic_road_map": "passed",
+                          "map_failure_retry": "passed", "real_tile_requests": False, "xss_escaped": "passed",
                           "touch_800x480": "passed", "mobile": "passed", "real_hardware_used": False}, indent=2))
     finally:
         server.close()

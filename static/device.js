@@ -3,7 +3,7 @@ const d = selector => document.querySelector(selector);
 const device = { ready:false, busy:false, saving:false, blob:null, source:"upload", preview:null,
   stream:null, opening:false, cameraGeneration:0, requestGeneration:0, controller:null, draft:null,
   records:[], total:0, examples:[], sampleIndex:0, map:null, markers:null, currentMarker:null, tiles:null,
-  tab:"capture", led:false, historyGeneration:0, pollTimer:null };
+  tab:"capture", led:false, historyGeneration:0, pollTimer:null, mapLoadTimer:null };
 const deviceToken = d('meta[name="app-token"]').content;
 const percent = value => `${(value*100).toFixed(1)}%`;
 const locationName = source => source === "simulated" ? "พิกัดจำลอง" : "พิกัดระบุเอง";
@@ -167,6 +167,52 @@ function initializeMap() {
   device.map=L.map("field-map",{zoomControl:true}).setView([16.053,103.652],17);
   L.control.scale({imperial:false}).addTo(device.map);device.markers=L.featureGroup().addTo(device.map);updateLocation();
 }
+function mapState(state) {
+  const descriptions={
+    loading:"กำลังโหลดแผนที่ถนน… ต้องใช้อินเทอร์เน็ต",
+    ready:"แผนที่ถนนจาก OpenStreetMap · ใช้อินเทอร์เน็ต",
+    partial:"โหลดแผนที่ถนนได้บางส่วน · ตรวจอินเทอร์เน็ตแล้วลองโหลดใหม่",
+    error:"โหลดแผนที่ถนนไม่ได้ · ตรวจอินเทอร์เน็ตแล้วกดลองโหลดใหม่",
+    offline:"ปิดแผนที่ถนนอยู่ · ตารางแสดงเฉพาะพิกัดจุดตรวจ"
+  };
+  d("#map-mode").textContent=descriptions[state];
+  d("#map-mode").dataset.state=state;
+  // Keep older open pages usable until the server has reloaded the template.
+  const notice=d("#map-notice"),detail=d("#map-notice-text"),retry=d("#retry-map");
+  if(notice)notice.hidden=state==="ready" || state==="loading";
+  if(detail)detail.textContent=state==="offline"
+    ? "ต้องเปิดแผนที่ถนนเพื่อดูถนนและสถานที่ ใช้อินเทอร์เน็ต แต่ภาพใบพืชยังเก็บในเครื่อง"
+    : "จุดตรวจยังแสดงได้ พื้นถนนต้องเชื่อมต่อ OpenStreetMap ผ่านอินเทอร์เน็ต";
+  if(retry)retry.textContent=state==="offline" ? "เปิดแผนที่ถนน" : "ลองโหลดใหม่";
+  d("#online-map").setAttribute("aria-pressed",String(!!device.tiles));
+  d("#online-map").textContent=device.tiles ? "ปิดแผนที่ถนน" : "เปิดแผนที่ถนน (อินเทอร์เน็ต)";
+}
+function setRoadMapEnabled(enabled) {
+  clearTimeout(device.mapLoadTimer);
+  if(device.tiles){device.tiles.off();device.tiles.remove();device.tiles=null;}
+  if(!enabled){mapState("offline");return;}
+  initializeMap();
+  const layer=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{
+    maxZoom:19,keepBuffer:1,updateWhenIdle:true,
+    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
+    referrerPolicy:"strict-origin-when-cross-origin"
+  });
+  device.tiles=layer;
+  let loaded=0,failed=0;
+  layer.on("loading",()=>{
+    if(device.tiles!==layer)return;
+    loaded=0;failed=0;mapState("loading");clearTimeout(device.mapLoadTimer);
+    device.mapLoadTimer=setTimeout(()=>{if(device.tiles===layer)mapState(loaded ? "partial" : "error");},12000);
+  });
+  layer.on("tileload",()=>{if(device.tiles===layer)loaded++;});
+  layer.on("tileerror",()=>{if(device.tiles===layer)failed++;});
+  layer.on("load",()=>{
+    if(device.tiles!==layer)return;
+    clearTimeout(device.mapLoadTimer);
+    mapState(failed ? (loaded ? "partial" : "error") : "ready");
+  });
+  mapState("loading");layer.addTo(device.map);
+}
 function renderMap() {
   if(!device.map)return;
   device.markers.clearLayers();d("#map-list").replaceChildren();
@@ -185,7 +231,12 @@ function showTab(tab) {
   device.tab=tab;
   for(const name of ["capture","map","history","settings"])d(`#screen-${name}`).hidden=name!==tab;
   document.querySelectorAll("[data-tab]").forEach(button=>{button.classList.toggle("active",button.dataset.tab===tab);button.setAttribute("aria-pressed",String(button.dataset.tab===tab));});
-  if(tab==="map"){initializeMap();device.map.invalidateSize();renderMap();fitPoints();}
+  if(tab==="map"){
+    const firstVisit=!device.map;
+    initializeMap();device.map.invalidateSize();renderMap();fitPoints();
+    // Request roads only when the user opens the map, and respect a manual switch off.
+    if(firstVisit)setRoadMapEnabled(true);
+  }
   if(tab==="history" || tab==="map")loadHistory().catch(error=>message(error.message,true));
   if(tab==="capture")updateGuide();
 }
@@ -220,11 +271,8 @@ document.querySelectorAll("[data-tab]").forEach(button=>button.addEventListener(
 d("#go-map").addEventListener("click",()=>showTab("map"));d("#fit-points").addEventListener("click",fitPoints);
 d("#map-filter").addEventListener("change",()=>{renderMap();fitPoints();});
 d("#refresh-history").addEventListener("click",()=>loadHistory().catch(error=>message(error.message,true)));
-d("#online-map").addEventListener("click",()=>{
-  if(device.tiles){device.tiles.remove();device.tiles=null;d("#map-mode").textContent="พิกัดออฟไลน์ · ยังไม่โหลดแผนที่ถนน";}
-  else{device.tiles=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',referrerPolicy:"strict-origin-when-cross-origin"}).addTo(device.map);device.tiles.on("tileerror",()=>{d("#map-mode").textContent="โหลดแผนที่ถนนไม่ได้ · จุดตรวจยังดูได้";});d("#map-mode").textContent="แผนที่ถนนจาก OpenStreetMap · ใช้อินเทอร์เน็ต";}
-  d("#online-map").setAttribute("aria-pressed",String(!!device.tiles));d("#online-map").textContent=device.tiles ? "ปิดแผนที่ถนน" : "เปิดแผนที่ถนน (อินเทอร์เน็ต)";
-});
+d("#online-map").addEventListener("click",()=>setRoadMapEnabled(!device.tiles));
+d("#retry-map")?.addEventListener("click",()=>setRoadMapEnabled(true));
 for(const id of ["#latitude","#longitude","#location-source"])d(id).addEventListener("change",updateLocation);
 d("#move-location").addEventListener("click",()=>{try{const point=locationSnapshot();d("#location-source").value="simulated";d("#latitude").value=Math.min(89.99,point.latitude+.0003).toFixed(6);d("#longitude").value=Math.min(179.99,point.longitude+.0002).toFixed(6);updateLocation();message("เปลี่ยนพิกัดสำหรับภาพถัดไปแล้ว");}catch(error){message(error.message,true);}});
 d("#toggle-led").addEventListener("click",()=>{device.led=!device.led;d("#led-status").textContent=`ไฟจำลอง: ${device.led ? "เปิด" : "ปิด"}`;d("#lamp").hidden=!device.led;d("#toggle-led").textContent=device.led ? "ปิด LED จำลอง" : "เปิด LED จำลอง";d("#toggle-led").setAttribute("aria-pressed",String(device.led));});
@@ -232,5 +280,5 @@ d("#battery").addEventListener("input",()=>{d("#battery-status").textContent=`�
 d("#fullscreen").addEventListener("click",async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{message("กด F11 เพื่อใช้หน้าจอเต็มได้ครับ");}});
 document.addEventListener("fullscreenchange",()=>{document.body.classList.toggle("kiosk",!!document.fullscreenElement);device.map?.invalidateSize();});
 document.addEventListener("visibilitychange",()=>{if(document.hidden){cancelAnalysis();stopCamera();}});
-window.addEventListener("pagehide",()=>{cancelAnalysis();stopCamera();releasePreview();clearTimeout(device.pollTimer);});
+window.addEventListener("pagehide",()=>{cancelAnalysis();stopCamera();releasePreview();clearTimeout(device.pollTimer);clearTimeout(device.mapLoadTimer);});
 updateLocation();status();loadHistory().catch(error=>message(error.message,true));
