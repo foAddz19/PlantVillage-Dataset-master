@@ -5,7 +5,7 @@ import json
 from flask import Blueprint, Response, jsonify, render_template, request, send_file
 from PIL import Image
 
-from .model import read_image
+from .images import read_image
 from .scans import ScanStore, location_fields
 
 

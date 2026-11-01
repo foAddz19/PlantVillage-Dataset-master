@@ -5,9 +5,9 @@ const state = { file: null, sample: null, previewUrl: null, busy: false, ready: 
   inputMode: "file", auto: false, autoTimer: null, requestId: 0, controller: null,
   requestSource: null, cameraResultUrl: null };
 const token = $('meta[name="app-token"]').content;
-const number = (value) => Number(value).toLocaleString("th-TH");
-const percent = (value) => `${(value * 100).toFixed(1)}%`;
-const splitNames = { train: "ภาพที่ใช้ฝึกโมเดล", test: "ภาพในชุดทดสอบ", unused: "ไม่ได้ใช้ฝึกโมเดลนี้" };
+const number = (value) => value == null ? "—" : Number(value).toLocaleString("th-TH");
+const percent = (value) => value == null ? "ยังไม่ประเมิน" : `${(value * 100).toFixed(1)}%`;
+const splitNames = { train: "ภาพที่ใช้ฝึกโมเดล", test: "ภาพในชุดทดสอบ", validation: "ภาพเลือกโมเดล", unused: "ไม่ได้ใช้ฝึกโมเดลนี้" };
 const camera = new LeafCamera({ onChange: updateAnalyzeButton, onStop: () => stopAutomatic(true) });
 
 async function api(path, options = {}) {
@@ -290,11 +290,14 @@ function renderMetadata(metadata) {
     $("#model-metrics").append(note);
   }
   const date = document.createElement("div"); date.className = "model-date";
-  date.textContent = `${metadata.algorithm} · ฝึกเมื่อ ${new Date(metadata.created_at).toLocaleString("th-TH")} · ใช้เวลา ${Math.round(metadata.seconds)} วินาที`;
+  const created = new Date(metadata.created_at);
+  const trainedAt = Number.isFinite(created.getTime()) ? created.toLocaleString("th-TH") : "ไม่ได้บันทึกวันที่";
+  const duration = Number.isFinite(metadata.seconds) ? ` · ใช้เวลา ${Math.round(metadata.seconds)} วินาที` : "";
+  date.textContent = `${metadata.algorithm || "โมเดลภาพ"} · ฝึกเมื่อ ${trainedAt}${duration}`;
   $("#model-metrics").append(date); $("#class-report").hidden = false; $("#report-body").replaceChildren();
-  (state.catalog?.classes || []).forEach(item => {
-    const scores = metadata.report[item.label]; if (!scores) return;
-    const row = document.createElement("tr"); const name = document.createElement("td"); name.textContent = `${item.crop_th} · ${item.disease_th}`;
+  (metadata.class_labels?.length ? metadata.class_labels : (state.catalog?.classes || [])).forEach(item => {
+    const scores = metadata.report?.[item.label]; if (!scores) return;
+    const row = document.createElement("tr"); const name = document.createElement("td"); name.textContent = `${item.crop_th || "ข้าว"} · ${item.disease_th || item.label.replace("Rice___", "").replaceAll("_", " ")}`;
     const original = document.createElement("small"); original.textContent = item.label; name.append(original); row.append(name);
     for (const value of [percent(scores.precision), percent(scores.recall), percent(scores["f1-score"]), number(scores.support)]) { const cell = document.createElement("td"); cell.textContent = value; row.append(cell); }
     $("#report-body").append(row);
@@ -306,9 +309,15 @@ function renderStatus(data) {
   if (!data.ready && state.auto) stopAutomatic(true);
   $("#pill-text").textContent = data.running ? `กำลังฝึก ${data.percent}%` : data.ready ? "โมเดลพร้อมใช้งาน" : "ยังไม่มีโมเดล";
   $("#model-pill").classList.toggle("offline", !data.ready);
-  $("#no-model").hidden = data.ready; $("#train-button").disabled = data.running;
-  $("#training-size").disabled = data.running;
-  $("#model-stage").textContent = data.running ? "กำลังฝึก" : data.ready ? "พร้อมใช้งาน" : "รอฝึกโมเดล";
+  $("#no-model").hidden = data.ready;
+  $("#no-model").textContent = data.message || "ยังไม่มีโมเดลพร้อมใช้งาน";
+  $("#train-button").disabled = data.running || data.training_available === false;
+  $("#training-size").disabled = data.running || data.training_available === false;
+  $("#training-panel").hidden = data.training_available === false;
+  $("#model-runtime-note").textContent = data.backend === "paddy"
+    ? `${data.message} · ประเมินโมเดล INT8 ด้วยชุดทดสอบที่แยกไว้ ผลยังไม่ใช่ความแม่นยำจากกล้องจริง`
+    : "ผลทดสอบจาก PlantVillage; คะแนนต่อภาพยังไม่ได้ปรับเทียบเป็นความน่าจะเป็นของโรค";
+  $("#model-stage").textContent = data.running ? "กำลังฝึก" : data.ready ? "พร้อมใช้งาน" : "ยังไม่พร้อมใช้งาน";
   $("#training-progress").hidden = data.stage === "idle" || (data.ready && data.stage === "ready" && !data.running);
   $("#progress-fill").style.width = `${data.percent}%`; $("#progress-message").textContent = data.message;
   renderMetadata(data.metadata); updateAnalyzeButton();
@@ -331,7 +340,9 @@ async function initialize() {
     state.catalog = await api("/api/catalog");
     $("#stat-crops").textContent = number(state.catalog.crop_count); $("#stat-classes").textContent = number(state.catalog.class_count); $("#stat-images").textContent = number(state.catalog.images);
     state.catalog.classes.forEach(item => { const option = document.createElement("option"); option.value = item.label; option.textContent = `${item.crop_th} · ${item.disease_th} (${number(item.count)} ภาพ)`; $("#class-filter").append(option); });
-    const featured = ["Apple___Apple_scab", "Grape___Black_rot", "Tomato___healthy", "Corn_(maize)___Common_rust_", "Potato___Early_blight", "Strawberry___Leaf_scorch"];
+    const preferred = ["Apple___Apple_scab", "Grape___Black_rot", "Tomato___healthy", "Corn_(maize)___Common_rust_", "Potato___Early_blight", "Strawberry___Leaf_scorch"];
+    const available = state.catalog.classes.filter(item => item.count > 0).map(item => item.label);
+    const featured = [...preferred.filter(label => available.includes(label)), ...available.filter(label => !preferred.includes(label))].slice(0, 6);
     const images = await Promise.all(featured.map(label => api(`/api/examples?${new URLSearchParams({ label })}`)));
     $("#quick-samples").replaceChildren(...images.filter(data => data.items.length).map(data => sampleCard(data.items[0])));
   } catch (error) { toast(error.message); }

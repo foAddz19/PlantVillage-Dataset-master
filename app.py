@@ -6,23 +6,45 @@ import os
 import secrets
 import threading
 import webbrowser
+from pathlib import Path
 from urllib.parse import urlencode
 
-from flask import Flask, jsonify, render_template, request, send_file
+from flask import Flask, g, jsonify, render_template, request, send_file
 from werkzeug.exceptions import HTTPException
 
 from leaflab.dataset import Catalog, ROOT
-from leaflab.model import ModelService, read_image
+from leaflab.images import read_image
 from leaflab.device import device_routes
 
 
-def create_app(catalog=None, service=None, data_dir=None):
+def create_app(catalog=None, service=None, data_dir=None, *, model_backend=None,
+               model_dir=None, dataset_dir=None, inference_only=False):
     app = Flask(__name__)
     app.config.update(MAX_CONTENT_LENGTH=9 * 1024 * 1024,
                       TRUSTED_HOSTS=["127.0.0.1", "localhost", "[::1]"])
-    catalog = catalog if catalog is not None else Catalog()
-    service = service if service is not None else ModelService(catalog)
+    backend = model_backend or os.environ.get("LEAFLAB_MODEL", "plantvillage")
+    if backend not in ("plantvillage", "paddy"):
+        raise ValueError("เลือก model_backend เป็น plantvillage หรือ paddy")
+    if backend == "paddy":
+        from leaflab.paddy_data import PaddyCatalog
+        from leaflab.paddy import PaddyService
+        catalog = catalog if catalog is not None else PaddyCatalog(dataset_dir)
+        service = service if service is not None else PaddyService(catalog, model_dir)
+    else:
+        catalog = catalog if catalog is not None else Catalog(Path(dataset_dir)) if dataset_dir else Catalog()
+        if service is None:
+            from leaflab.model import ModelService
+            service = ModelService(catalog, model_dir) if model_dir else ModelService(catalog)
+
+    def service_status():
+        result = {**service.status(), "backend": backend}
+        result["training_available"] = backend == "plantvillage" and not inference_only and result.get("training_available", True)
+        return result
+
+    def record_key(label, path):
+        return path.relative_to(catalog.directory).as_posix()
     token = secrets.token_urlsafe(32)
+    inference_slot = threading.BoundedSemaphore(1)
     app.extensions["model_service"] = service
     app.register_blueprint(device_routes(service, token, data_dir or ROOT / "data"))
 
@@ -30,6 +52,15 @@ def create_app(catalog=None, service=None, data_dir=None):
     def protect_local_actions():
         if request.method == "POST" and not secrets.compare_digest(request.headers.get("X-App-Token", ""), token):
             return jsonify(error="กรุณารีเฟรชหน้าเว็บแล้วลองใหม่"), 403
+        if backend == 'paddy' and request.endpoint in ('predict', 'predict_example', 'device.analyze'):
+            if not inference_slot.acquire(blocking=False):
+                return jsonify(error='กำลังวิเคราะห์ภาพอื่น กรุณารอสักครู่แล้วลองใหม่'), 429
+            g.inference_slot = True
+
+    @app.teardown_request
+    def release_inference_slot(error):
+        if g.pop('inference_slot', False):
+            inference_slot.release()
 
     @app.after_request
     def headers(response):
@@ -69,11 +100,11 @@ def create_app(catalog=None, service=None, data_dir=None):
 
     @app.get("/")
     def index():
-        return render_template("index.html", token=token)
+        return render_template("index.html", token=token, model_backend=backend)
 
     @app.get("/api/health")
     def health():
-        return jsonify(app="leaf-lab", status="ok", pid=os.getpid())
+        return jsonify(app="leaf-lab", status="ok", pid=os.getpid(), model_backend=backend)
 
     @app.get("/api/catalog")
     def dataset_summary():
@@ -81,7 +112,7 @@ def create_app(catalog=None, service=None, data_dir=None):
 
     @app.get("/api/status")
     def status():
-        return jsonify(service.status())
+        return jsonify(service_status())
 
     def image_args(data):
         label = data.get("label", "")
@@ -124,19 +155,20 @@ def create_app(catalog=None, service=None, data_dir=None):
             choices = [(value, 0) for value in labels[page*12:(page+1)*12] if catalog.files[value]]
         with service.lock:
             artifact = service.artifact
-        membership = {row["path"]: row["split"] for row in artifact["manifest"]} if artifact else {}
+        membership = {row["path"]: row["split"] for row in artifact.get("manifest", [])} if artifact else {}
         rows = []
         for selected, index in choices:
             path = catalog.path(selected, index)
-            split = membership.get(f"{selected}/{path.name}", "unused")
+            split = membership.get(record_key(selected, path), "unused")
             rows.append({**label_info(selected), "index": index, "split": split,
                          "url": "/api/image?" + urlencode({"label": selected, "index": index})})
         return jsonify(items=rows, page=page, pages=max(1, (total+11)//12), total=total)
 
     @app.post("/api/predict")
     def predict():
-        if not service.status()["ready"]:
-            raise LookupError("กรุณาฝึกโมเดลก่อนเริ่มวิเคราะห์ภาพ")
+        current = service_status()
+        if not current["ready"]:
+            raise LookupError(current.get("message", "ยังไม่มีโมเดลพร้อมใช้งาน"))
         uploaded = request.files.get("image")
         if uploaded is None or not uploaded.filename:
             raise ValueError("กรุณาเลือกภาพก่อน")
@@ -155,12 +187,14 @@ def create_app(catalog=None, service=None, data_dir=None):
         prediction = service.predict(read_image(path))
         with service.lock:
             artifact = service.artifact
-        split = next((row["split"] for row in artifact["manifest"]
-                      if row["path"] == f"{label}/{path.name}"), "unused")
+        split = next((row["split"] for row in (artifact or {}).get("manifest", [])
+                      if row["path"] == record_key(label, path)), "unused")
         return jsonify({**prediction, "source": "dataset", "actual_label": label, "split": split})
 
     @app.post("/api/train")
     def train():
+        if not service_status()["training_available"]:
+            raise ValueError("โหมดนี้ใช้วิเคราะห์ภาพเท่านั้น สำหรับ Paddy Doctor ให้ฝึกด้วย train_paddy.py บน PC")
         data = request.get_json(silent=True)
         if not isinstance(data, dict):
             raise ValueError("กรุณาเลือกขนาดชุดฝึก")
@@ -168,7 +202,7 @@ def create_app(catalog=None, service=None, data_dir=None):
         if type(size) is not int or size not in (150, 300, 600):
             raise ValueError("เลือกขนาดชุดฝึก 150, 300 หรือ 600 ภาพต่อกลุ่ม")
         service.start_training(size)
-        return jsonify(service.status()), 202
+        return jsonify(service_status()), 202
 
     return app
 
@@ -178,6 +212,10 @@ def main():
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--open-browser", action="store_true")
     parser.add_argument("--device", action="store_true", help="Open the PC device simulator")
+    parser.add_argument("--model", choices=("plantvillage", "paddy"), default=os.environ.get("LEAFLAB_MODEL", "plantvillage"))
+    parser.add_argument("--model-dir", type=Path)
+    parser.add_argument("--dataset-dir", type=Path)
+    parser.add_argument("--inference-only", action="store_true")
     args = parser.parse_args()
     base_url = f"http://127.0.0.1:{args.port}"
     url = base_url + ("/device" if args.device else "")
@@ -186,12 +224,16 @@ def main():
         from urllib.request import urlopen
         try:
             with urlopen(base_url + "/api/health", timeout=1) as response:
-                if json.load(response).get("app") == "leaf-lab":
+                running = json.load(response)
+                if running.get("app") == "leaf-lab" and running.get("model_backend", "plantvillage") == args.model:
                     webbrowser.open(url)
                     return
+                if running.get("app") == "leaf-lab":
+                    parser.error("พอร์ตนี้เปิดโมเดลอีกชนิดอยู่ กรุณาปิดเซิร์ฟเวอร์เดิมหรือเพิ่ม --port 8766")
         except (OSError, ValueError):
             pass
-    app = create_app()
+    app = create_app(model_backend=args.model, model_dir=args.model_dir,
+                     dataset_dir=args.dataset_dir, inference_only=args.inference_only)
     if args.open_browser:
         threading.Timer(1.5, lambda: webbrowser.open(url)).start()
     print(f"Leaf Lab is ready at {url}\nPress Ctrl+C to stop.", flush=True)

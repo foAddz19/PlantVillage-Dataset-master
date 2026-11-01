@@ -11,7 +11,7 @@ DATASET = ROOT / "PlantVillage-Dataset-master"
 COLOR_DIR = DATASET / "raw" / "color"
 EXTENSIONS = {".jpg", ".jpeg", ".png"}
 CROPS = {
-    "Apple": "แอปเปิล", "Blueberry": "บลูเบอร์รี",
+    "Rice": "ข้าว", "Apple": "แอปเปิล", "Blueberry": "บลูเบอร์รี",
     "Cherry_(including_sour)": "เชอร์รี", "Corn_(maize)": "ข้าวโพด",
     "Grape": "องุ่น", "Orange": "ส้ม", "Peach": "พีช",
     "Pepper,_bell": "พริกหวาน", "Potato": "มันฝรั่ง",
@@ -36,6 +36,10 @@ DISEASES = {
 
 def label_info(label: str) -> dict:
     crop, disease = label.split("___", 1)
+    if crop == "Rice":
+        from .paddy_labels import ALL_LABELS, rice_info
+        if disease in ALL_LABELS:
+            return rice_info(disease)
     return {"label": label, "crop": crop, "crop_th": CROPS.get(crop, crop),
             "disease": disease, "disease_th": DISEASES.get(disease, disease.replace("_", " ")),
             "healthy": disease == "healthy"}
@@ -53,17 +57,22 @@ class Catalog:
     def __init__(self, directory: Path = COLOR_DIR, leaf_map_path: Path | None = None):
         self.directory = directory.resolve()
         self.files = {}
+        self.empty_classes = []
         if directory.exists():
             for folder in sorted(directory.iterdir()):
                 if folder.is_dir() and "___" in folder.name:
-                    self.files[folder.name] = sorted(
-                        p.name for p in folder.iterdir() if p.suffix.lower() in EXTENSIONS)
+                    names = sorted(p.name for p in folder.iterdir() if p.is_file() and p.suffix.lower() in EXTENSIONS)
+                    if names:
+                        self.files[folder.name] = names
+                    else:
+                        self.empty_classes.append(folder.name)
         self.leaf_map_path = leaf_map_path or DATASET / "leaf_grouping" / "leaf-map.json"
 
     def summary(self) -> dict:
         classes = [{**label_info(label), "count": len(files)} for label, files in self.files.items()]
         return {"images": sum(c["count"] for c in classes), "class_count": len(classes),
-                "crop_count": len({c["crop"] for c in classes}), "classes": classes}
+                "crop_count": len({c["crop"] for c in classes}), "classes": classes,
+                "empty_classes": self.empty_classes, "dataset": "plantvillage"}
 
     def path(self, label: str, index: int) -> Path:
         if label not in self.files or index < 0 or index >= len(self.files[label]):

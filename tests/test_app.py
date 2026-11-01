@@ -22,7 +22,9 @@ class AppTests(unittest.TestCase):
     def setUpClass(cls):
         cls.catalog = Catalog()
         cls.service = ModelService(cls.catalog)
-        cls.app = create_app(cls.catalog, cls.service)
+        cls.storage = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(cls.storage.cleanup)
+        cls.app = create_app(cls.catalog, cls.service, data_dir=Path(cls.storage.name))
         cls.app.config["TESTING"] = True
         cls.client = cls.app.test_client()
         html = cls.client.get("/").get_data(as_text=True)

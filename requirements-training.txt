@@ -1,0 +1,5 @@
+# Install in .venv-training on the PC, separately from the web app.
+tensorflow==2.21.0
+ai-edge-litert==2.3.0
+Pillow==12.3.0
+numpy==2.5.3
