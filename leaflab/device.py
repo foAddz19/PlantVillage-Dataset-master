@@ -9,7 +9,7 @@ from .images import read_image
 from .scans import ScanStore, location_fields
 
 
-def device_routes(service, token, directory):
+def device_routes(service, token, directory, printer):
     routes = Blueprint("device", __name__)
     store = ScanStore(directory)
 
@@ -41,6 +41,27 @@ def device_routes(service, token, directory):
         if not isinstance(data, dict):
             raise ValueError("ข้อมูลบันทึกไม่ถูกต้อง")
         return jsonify(store.save(identifier, data.get("severity", "unassessed"), data.get("note", "")))
+
+    @routes.get("/api/device/printer")
+    def printer_status():
+        return jsonify(printer.status())
+
+    @routes.get("/api/device/scans/<identifier>/receipt.png")
+    def receipt(identifier):
+        row = store.get(identifier)
+        if not row['saved_at']:
+            raise ValueError('กรุณาบันทึกจุดตรวจก่อนเปิดใบผลตรวจ')
+        output = io.BytesIO()
+        printer.preview(row).save(output, format='PNG')
+        output.seek(0)
+        return send_file(output, mimetype='image/png')
+
+    @routes.post("/api/device/scans/<identifier>/print")
+    def print_scan(identifier):
+        data = request.get_json(silent=True)
+        if not isinstance(data,dict) or set(data) != {'request_id'}:
+            raise ValueError('งานพิมพ์ต้องมีเฉพาะ request_id; ระบบใช้ผลตรวจที่บันทึกไว้เท่านั้น')
+        return jsonify(printer.print_scan(store.get(identifier),data['request_id']))
 
     @routes.get("/api/device/scans")
     def history():

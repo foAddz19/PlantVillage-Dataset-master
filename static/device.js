@@ -3,7 +3,7 @@ const d = selector => document.querySelector(selector);
 const device = { ready:false, busy:false, saving:false, blob:null, source:"upload", preview:null,
   stream:null, opening:false, cameraGeneration:0, requestGeneration:0, controller:null, draft:null,
   records:[], total:0, examples:[], sampleIndex:0, map:null, markers:null, currentMarker:null, tiles:null,
-  tab:"capture", led:false, historyGeneration:0, pollTimer:null, mapLoadTimer:null };
+  printing:false, printer:{configured:false}, printedIds:new Set(), tab:"capture", led:false, historyGeneration:0, pollTimer:null, mapLoadTimer:null };
 const deviceToken = d('meta[name="app-token"]').content;
 const percent = value => `${(value*100).toFixed(1)}%`;
 const locationName = source => source === "simulated" ? "พิกัดจำลอง" : "พิกัดระบุเอง";
@@ -20,6 +20,13 @@ function buttons() {
   d("#analyze-scan").textContent=device.busy ? "กำลังตรวจ…" : "◉ ถ่าย / ตรวจโรค";
   d("#save-scan").disabled=!device.draft || !!device.draft.saved_at || device.busy || device.saving;
   d("#save-scan").textContent=device.saving ? "กำลังบันทึก…" : device.draft?.saved_at ? "✓ บันทึกแล้ว" : "▣ บันทึกจุดตรวจ";
+  d("#print-scan").disabled=!device.draft?.saved_at || !device.printer.configured || device.printing || device.busy || device.saving;
+  d("#print-scan").textContent=device.printing ? "กำลังส่งพิมพ์…" : device.printedIds.has(device.draft?.id) ? "พิมพ์ซ้ำ" : "พิมพ์ผล";
+  d("#preview-receipt").disabled=!device.draft?.saved_at || device.printing;
+  document.querySelectorAll("[data-print-scan]").forEach(button=>{
+    button.disabled=!device.printer.configured || device.printing;
+    button.textContent=device.printedIds.has(button.dataset.printScan) ? "พิมพ์ซ้ำ" : "พิมพ์ผล";
+  });
   d("#open-camera").disabled=device.busy || !!device.stream || device.opening;
   d("#open-camera").textContent=device.opening ? "กำลังเปิด…" : "เปิดกล้อง";
   d("#close-camera").disabled=!device.stream && !device.opening;
@@ -90,7 +97,7 @@ function chooseImage(blob,source) {
   stopCamera(); releasePreview(); clearResult(); device.blob=blob; device.source=source;
   device.preview=URL.createObjectURL(blob); d("#device-preview").src=device.preview;
   d("#device-preview").hidden=false; d("#camera-empty").hidden=true;
-  d("#source-label").textContent=source==="sample" ? "ภาพทดลองจาก PlantVillage" : "ไฟล์จากเครื่อง";
+  d("#source-label").textContent=source==="sample" ? "ภาพทดลองจากชุดข้อมูลที่เลือก" : "ไฟล์จากเครื่อง";
   buttons(); message("เลือกภาพแล้ว กดถ่าย / ตรวจโรคเพื่อวิเคราะห์");
 }
 async function cameraFrame() {
@@ -148,6 +155,23 @@ async function saveScan() {
     if(device.draft?.id===identifier){device.draft=row;renderResult(row);}
     await loadHistory();message("บันทึกภาพ ผลตรวจ และพิกัดลงฐานข้อมูลแล้ว");
   }catch(error){message(error.message,true);}finally{device.saving=false;buttons();}
+}
+function previewReceipt(identifier) {
+  if(!identifier)return;
+  d("#receipt-image").src=`/api/device/scans/${encodeURIComponent(identifier)}/receipt.png`;
+  d("#receipt-dialog").showModal();
+}
+async function printScan(identifier) {
+  if(device.printing || !device.printer.configured)return;
+  device.printing=true;buttons();
+  // Every deliberate click is a new job. No automatic retries after USB/network errors.
+  const requestId=crypto.randomUUID();
+  try {
+    const result=await api(`/api/device/scans/${encodeURIComponent(identifier)}/print`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({request_id:requestId})});
+    device.printedIds.add(identifier);message(result.message);
+  }catch(error){
+    device.printedIds.add(identifier);message(`${error.message} · ตรวจใบพิมพ์ก่อนกดพิมพ์ซ้ำ`,true);
+  }finally{device.printing=false;buttons();}
 }
 function markerColor(row) {
   if(row.severity==="severe")return "#d04f46";
@@ -252,7 +276,12 @@ function renderHistory() {
     title.textContent=recordTitle(row);details.textContent=`${dateText(row.captured_at)} · ${row.latitude.toFixed(5)}, ${row.longitude.toFixed(5)}`;
     note.textContent=row.note;tag.className="simulation-tag";tag.textContent=locationName(row.location_source);body.append(title,details,tag,note);
     button.textContent="ดูบนแผนที่ ↗";button.addEventListener("click",()=>{showTab("map");device.map.setView([row.latitude,row.longitude],18);L.popup().setLatLng([row.latitude,row.longitude]).setContent(popup(row)).openOn(device.map);});
-    card.append(img,body,button);d("#history-list").append(card);
+    const actions=document.createElement("div");actions.className="scan-actions";
+    const preview=document.createElement("button");preview.textContent="ดูใบผลตรวจ";preview.addEventListener("click",()=>previewReceipt(row.id));
+    const print=document.createElement("button");print.dataset.printScan=row.id;print.textContent=device.printedIds.has(row.id) ? "พิมพ์ซ้ำ" : "พิมพ์ผล";
+    print.disabled=!device.printer.configured || device.printing;print.addEventListener("click",()=>printScan(row.id));
+    actions.append(button,preview,print);
+    card.append(img,body,actions);d("#history-list").append(card);
   }
 }
 async function loadHistory() {const generation=++device.historyGeneration;const data=await api("/api/device/scans");if(generation!==device.historyGeneration)return;device.records=data.items;device.total=data.total;renderHistory();renderMap();}
@@ -260,12 +289,18 @@ async function status() {
   clearTimeout(device.pollTimer);
   try {const data=await api("/api/status");device.ready=data.ready;d("#ai-status").textContent=data.ready ? "● AI พร้อมตรวจ" : "● ยังไม่มีโมเดล AI";}
   catch{device.ready=false;d("#ai-status").textContent="● เชื่อมต่อโปรแกรมไม่ได้";}
+  try{device.printer=await api("/api/device/printer");d("#printer-status").textContent=device.printer.message;}
+  catch{device.printer={configured:false};d("#printer-status").textContent="ตรวจสถานะเครื่องพิมพ์ไม่ได้";}
   buttons();device.pollTimer=setTimeout(status,15000);
 }
 d("#open-camera").addEventListener("click",openCamera);
 d("#close-camera").addEventListener("click",()=>{cancelAnalysis();stopCamera();message("ปิดกล้องแล้ว");});
 d("#device-file").addEventListener("change",event=>{const file=event.target.files[0];if(file)chooseImage(file,"upload");});
 d("#sample-image").addEventListener("click",async()=>{try{if(!device.examples.length)device.examples=(await api("/api/examples")).items;const item=device.examples[device.sampleIndex++%device.examples.length];if(!item)throw new Error("ยังไม่มีชุดภาพทดลอง เลือกไฟล์หรือเปิดกล้องได้");const response=await fetch(item.url);if(!response.ok)throw new Error("โหลดภาพทดลองไม่ได้");chooseImage(await response.blob(),"sample");}catch(error){message(error.message,true);}});
+d("#print-scan").addEventListener("click",()=>printScan(device.draft?.id));
+d("#preview-receipt").addEventListener("click",()=>previewReceipt(device.draft?.id));
+d("#close-receipt").addEventListener("click",()=>d("#receipt-dialog").close());
+d("#receipt-image").addEventListener("error",()=>{d("#receipt-dialog").close();message("เปิดใบผลตรวจไม่ได้ กรุณาตรวจการติดตั้งส่วนพิมพ์และฟอนต์ไทย",true);});
 d("#analyze-scan").addEventListener("click",analyze);d("#save-scan").addEventListener("click",saveScan);
 document.querySelectorAll("[data-tab]").forEach(button=>button.addEventListener("click",()=>showTab(button.dataset.tab)));
 d("#go-map").addEventListener("click",()=>showTab("map"));d("#fit-points").addEventListener("click",fitPoints);

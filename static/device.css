@@ -12,3 +12,5 @@
 #map-notice p{margin:0}
 #retry-map{flex-shrink:0;min-height:44px;background:#174f40;color:white;border-color:#174f40}
 @media(max-width:600px){#map-notice{align-items:stretch;flex-direction:column}#screen-map .map-buttons{width:100%}#screen-map .map-buttons button{flex:1}}
+
+.receipt-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}.receipt-actions>span{font-size:11px;color:#6e806f}.scan-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.scan-actions button{font-size:11px}#receipt-dialog{width:min(440px,94vw);max-height:90vh;overflow:auto;border:1px solid #d2ddce;border-radius:12px;padding:18px;background:#edf2e8}#receipt-dialog::backdrop{background:#123f3680}.receipt-dialog-heading{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:14px}#receipt-image{display:block;width:auto;max-width:100%;height:auto;margin:0 auto;background:white;image-rendering:pixelated}@media(max-width:600px){.scan-actions{grid-column:2;justify-content:flex-start}.scan-card .scan-actions button{grid-column:auto}.receipt-actions>span{flex-basis:100%}}

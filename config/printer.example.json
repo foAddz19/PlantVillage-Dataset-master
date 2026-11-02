@@ -1,0 +1,13 @@
+{
+  "enabled": false,
+  "vendor_id": null,
+  "product_id": null,
+  "serial_number": null,
+  "interface": null,
+  "out_endpoint": null,
+  "width_dots": 384,
+  "timeout_ms": 5000,
+  "fragment_height": 64,
+  "pause_ms": 100,
+  "feed_lines": 4
+}

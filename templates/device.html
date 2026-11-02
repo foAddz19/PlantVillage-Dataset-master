@@ -5,8 +5,8 @@
   <meta name="app-token" content="{{ token }}"><meta name="theme-color" content="#123f36">
   <title>Plant Doctor · เครื่องตรวจจำลอง</title>
   <link rel="icon" href="/static/leaf.svg"><link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="/static/device.css?v=20261021-map">
-  <script src="/static/vendor/leaflet/leaflet.js" defer></script><script src="/static/device.js?v=20261021-map" defer></script>
+  <link rel="stylesheet" href="/static/device.css?v=20261102-receipt-v2">
+  <script src="/static/vendor/leaflet/leaflet.js" defer></script><script src="/static/device.js?v=20261102-receipt-v2" defer></script>
 </head>
 <body>
   <header class="top"><a class="brand" href="/device"><img src="/static/leaf.svg" alt="">PLANT <b>DOCTOR</b><span>FIELD LAB / 01</span></a><div class="top-actions"><a href="/">ห้องทดลอง AI</a><button id="fullscreen">เต็มหน้าจอ ↗</button></div></header>
@@ -27,7 +27,7 @@
             <div id="device-result" hidden><div id="result-snapshot"><img id="analyzed-frame" alt="ภาพที่ใช้ตรวจ"><div><strong id="result-disease"></strong><span id="result-crop"></span><small id="result-time"></small></div></div><p id="uncertainty"></p><div id="device-candidates"></div><div class="capture-location"><span id="result-location"></span><small>พิกัด ณ ตอนส่งภาพตรวจ</small></div><label for="observer-severity">ความรุนแรงที่ผู้ตรวจประเมิน</label><select id="observer-severity"><option value="unassessed">ยังไม่ประเมิน</option><option value="mild">เล็กน้อย · ผู้ตรวจระบุ</option><option value="severe">รุนแรง · ผู้ตรวจระบุ</option></select><input id="scan-note" maxlength="500" placeholder="บันทึกเพิ่มเติม เช่น แปลง A แถว 3" aria-label="บันทึกเพิ่มเติม"><p class="hint">คะแนน AI ไม่ใช่โอกาสยืนยันโรคหรือระดับความรุนแรง</p></div>
           </div>
         </div>
-        <div class="primary-actions"><button id="analyze-scan" class="primary" disabled>◉ ถ่าย / ตรวจโรค</button><button id="save-scan" disabled>▣ บันทึกจุดตรวจ</button><button id="go-map">⌖ ดูแผนที่</button></div>
+        <div class="primary-actions"><button id="analyze-scan" class="primary" disabled>◉ ถ่าย / ตรวจโรค</button><button id="save-scan" disabled>▣ บันทึกจุดตรวจ</button><button id="go-map">⌖ ดูแผนที่</button></div><div class="receipt-actions"><button id="preview-receipt" disabled>ดูใบผลตรวจ</button><button id="print-scan" disabled>พิมพ์ผล</button><span id="printer-status" role="status">กำลังตรวจเครื่องพิมพ์…</span></div><p class="hint">บันทึกจุดตรวจก่อนเปิดใบผลตรวจหรือพิมพ์ผ่าน XP-58IIH USB · พิมพ์ซ้ำได้จากหน้าประวัติ</p>
       </section>
       <section id="screen-map" class="screen" hidden>
         <div class="section-title"><div><h2>แผนที่จุดตรวจ</h2><p id="map-mode" role="status" aria-live="polite">แผนที่ถนนจะโหลดเมื่อเปิดหน้านี้ · ต้องใช้อินเทอร์เน็ต</p></div><div class="map-buttons"><button id="fit-points">รวมทุกจุด</button><button id="online-map" aria-pressed="false">เปิดแผนที่ถนน (อินเทอร์เน็ต)</button></div></div>
@@ -40,5 +40,6 @@
     </div>
     <p class="below-note">ต้นแบบซอฟต์แวร์สำหรับทดลองบนคอมพิวเตอร์ · การต่อกล้อง Raspberry Pi, GPS และวงจรจริงจะทดสอบเมื่ออุปกรณ์มาถึง</p>
   </main><div id="device-message" role="status" aria-live="polite" hidden>พร้อมเริ่มสำรวจ</div>
+<dialog id="receipt-dialog"><div class="receipt-dialog-heading"><strong>ใบผลตรวจ 58 มม.</strong><button id="close-receipt">ปิด</button></div><img id="receipt-image" alt="ใบผลตรวจภาษาไทยสำหรับเครื่องพิมพ์ความร้อน"></dialog>
 </body>
 </html>

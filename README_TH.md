@@ -1,5 +1,8 @@
 # Leaf Lab — โปรแกรมวิเคราะห์ภาพใบพืช
 
+**พิมพ์ผลผ่าน XP-58IIH USB:** ใช้ปุ่มดูใบผลตรวจ/พิมพ์ผลหลังบันทึกจุดตรวจ และพิมพ์ซ้ำจากประวัติได้ ดู [PRINTER_GUIDE_TH.md](PRINTER_GUIDE_TH.md) สำหรับ Raspberry Pi มีแพ็กเกจ [dist/ai-plant-pi.zip](dist/ai-plant-pi.zip) รวมไฟล์พร้อมย้ายไป Pi
+
+
 **ตรวจโรคข้าว Paddy Doctor:** เปิด `start_paddy.bat` ใช้โมเดลข้าว INT8 แยกจาก PlantVillage รองรับชุดแข่งขัน 10 คลาสและชุดต้นฉบับ 13 คลาส ดูวิธีติดตั้ง ฝึก ประเมิน และย้ายไป Raspberry Pi 5 RAM 2GB ใน [PADDY_GUIDE_TH.md](PADDY_GUIDE_TH.md) โหมดข้าวจะไม่ใช้โมเดล PlantVillage แทนเมื่อไม่มีน้ำหนักข้าว
 
 

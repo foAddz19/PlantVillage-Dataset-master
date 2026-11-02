@@ -5,3 +5,4 @@ scikit-learn==1.9.1
 waitress==3.0.2
 joblib==1.6.0
 ai-edge-litert==2.3.0
+-r requirements-printer.txt

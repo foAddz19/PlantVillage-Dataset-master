@@ -4,3 +4,4 @@ Pillow==12.3.0
 numpy>=1.26,<3
 waitress==3.0.2
 ai-edge-litert==2.3.0
+-r requirements-printer.txt

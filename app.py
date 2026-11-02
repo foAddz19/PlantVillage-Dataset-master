@@ -18,7 +18,7 @@ from leaflab.device import device_routes
 
 
 def create_app(catalog=None, service=None, data_dir=None, *, model_backend=None,
-               model_dir=None, dataset_dir=None, inference_only=False):
+               model_dir=None, dataset_dir=None, inference_only=False, printer_service=None):
     app = Flask(__name__)
     app.config.update(MAX_CONTENT_LENGTH=9 * 1024 * 1024,
                       TRUSTED_HOSTS=["127.0.0.1", "localhost", "[::1]"])
@@ -46,7 +46,15 @@ def create_app(catalog=None, service=None, data_dir=None, *, model_backend=None,
     token = secrets.token_urlsafe(32)
     inference_slot = threading.BoundedSemaphore(1)
     app.extensions["model_service"] = service
-    app.register_blueprint(device_routes(service, token, data_dir or ROOT / "data"))
+    from leaflab.printing import PrintService
+    from leaflab.printing import PrinterError
+    printer_service = printer_service or PrintService(data_dir or ROOT / "data")
+    app.extensions["printer_service"] = printer_service
+    app.register_blueprint(device_routes(service, token, data_dir or ROOT / "data", printer_service))
+
+    @app.errorhandler(PrinterError)
+    def printer_error(error):
+        return jsonify(error=str(error)), error.status
 
     @app.before_request
     def protect_local_actions():

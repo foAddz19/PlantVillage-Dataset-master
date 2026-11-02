@@ -1,5 +1,8 @@
 # การใช้โมเดลข้าว Paddy Doctor
 
+**พิมพ์ใบผลตรวจ:** รองรับการส่ง ESC/POS ผ่าน USB พร้อมฟอนต์ไทย ดู [PRINTER_GUIDE_TH.md](PRINTER_GUIDE_TH.md) เมื่อย้ายไป Pi ให้ใช้แพ็กเกจ `dist/ai-plant-pi.zip` ซึ่งรวม `assets/fonts/`, `config/printer.example.json`, `printer_tools.py` และ `requirements-printer.txt` แล้ว การฝึกโมเดลตามคู่มือนี้ทำบน PC ที่เก็บโปรเจกต์ต้นฉบับ
+
+
 ผลโมเดลที่ฝึกจาก ZIP บนเครื่องนี้และผลวัด RAM/เวลา อยู่ใน [PADDY_MODEL_REPORT_TH.md](PADDY_MODEL_REPORT_TH.md)
 
 โปรเจกต์มี backend สองชุด แยกน้ำหนักและไลบรารีที่โหลด:
