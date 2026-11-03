@@ -238,6 +238,7 @@ function renderResult(result) {
     const fill = document.createElement("div"); fill.style.width = percent(item.score); track.append(fill);
     row.append(top, track); $("#candidates").append(row);
   });
+  PlantCare.summary($("#lab-care"),result.advice);
   $("#sample-note").hidden = result.source !== "dataset";
   if (result.source === "dataset") {
     const matched = state.catalog.classes.find(item => item.label === result.actual_label);

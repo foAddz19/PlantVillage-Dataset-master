@@ -123,3 +123,8 @@ sh start_pi.sh
 ตรวจภาพใบตัวอย่างภาษาไทย, ถอด raster กลับเทียบ bitmap, จำลอง descriptor/partial USB writes/สิทธิ์ USB, การคืน kernel driver, งานซ้ำหลังรีสตาร์ต, ข้อผิดพลาดที่อาจพิมพ์ไปบางส่วน, API และหน้าเว็บจริง โดยใช้ USB transport จำลอง **ยังไม่ได้ทดสอบกับ XP-58IIH ที่ต่อ Pi จริง**
 
 อ้างอิง: [XP-58IIH](https://www.xprintermexico.com/product-page/xp58iih), [python-escpos usage](https://python-escpos.readthedocs.io/en/latest/user/usage.html), [PyUSB tutorial](https://github.com/pyusb/pyusb/blob/master/docs/tutorial.rst), [Noto Sans Thai และใบอนุญาต](https://github.com/google/fonts/tree/main/ofl/notosansthai)
+
+
+## คำแนะนำดูแลข้าว
+
+เพิ่มคู่มือออฟไลน์ 10 กลุ่ม คำแนะนำหลังวิเคราะห์ เปิดย้อนหลัง และสรุปท้ายใบพิมพ์แล้ว อ่านวิธีใช้ ขอบเขต และแหล่งอ้างอิงใน [CARE_GUIDE_TH.md](CARE_GUIDE_TH.md) ผลที่ยังไม่ชัดได้รับคำแนะนำตรวจเพิ่มก่อนเลือกวิธีจัดการเฉพาะโรค

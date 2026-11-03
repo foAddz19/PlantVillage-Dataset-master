@@ -14,3 +14,20 @@
 @media(max-width:600px){#map-notice{align-items:stretch;flex-direction:column}#screen-map .map-buttons{width:100%}#screen-map .map-buttons button{flex:1}}
 
 .receipt-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}.receipt-actions>span{font-size:11px;color:#6e806f}.scan-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.scan-actions button{font-size:11px}#receipt-dialog{width:min(440px,94vw);max-height:90vh;overflow:auto;border:1px solid #d2ddce;border-radius:12px;padding:18px;background:#edf2e8}#receipt-dialog::backdrop{background:#123f3680}.receipt-dialog-heading{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:14px}#receipt-image{display:block;width:auto;max-width:100%;height:auto;margin:0 auto;background:white;image-rendering:pixelated}@media(max-width:600px){.scan-actions{grid-column:2;justify-content:flex-start}.scan-card .scan-actions button{grid-column:auto}.receipt-actions>span{flex-basis:100%}}
+
+
+/* Single-record deletion: details first, cancel focused by default. */
+.scan-actions button.delete-scan{color:#a14432;border-color:#e3c3b9;background:#fffaf7}
+.scan-actions button.delete-scan:hover{background:#fbece6}
+#delete-dialog{box-sizing:border-box;width:min(560px,94vw);max-height:92vh;overflow:auto;border:1px solid #dec9bf;border-radius:14px;padding:24px;color:#24483c;background:#fffdf9;line-height:1.8}
+#delete-dialog::backdrop{background:#153c338c}
+#delete-dialog h2{font-size:21px;margin:0 0 18px}
+.delete-summary{display:flex;align-items:center;gap:14px;padding:14px;border:1px solid #e3e8da;border-radius:10px;background:#f5f8f0;overflow-wrap:anywhere}
+.delete-summary img{width:76px;height:76px;object-fit:cover;border-radius:8px;flex-shrink:0}
+.delete-summary strong,.delete-summary span,.delete-summary small{display:block}
+.delete-summary strong{font-size:16px}.delete-summary span{font-size:12px;color:#62785d}.delete-summary small{font-size:11px;color:#7c8a70}
+#delete-warning{font-size:14px;color:#873f2f;margin:18px 0 8px}.delete-scope{font-size:12px;color:#697b62}
+.delete-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}.delete-actions button{min-height:48px;padding:10px 18px}
+#confirm-delete{background:#a34632;color:white;border-color:#a34632}
+#delete-error{font-size:13px;background:#fff0e8;color:#8e3d2a;padding:10px;border-radius:8px}
+@media(max-width:600px){#delete-dialog{padding:18px}#delete-dialog h2{font-size:19px}.delete-summary{gap:10px;padding:10px}.delete-summary img{width:56px;height:56px}.delete-actions button{flex:1;padding:10px 8px;font-size:13px}}

@@ -3,7 +3,7 @@ const d = selector => document.querySelector(selector);
 const device = { ready:false, busy:false, saving:false, blob:null, source:"upload", preview:null,
   stream:null, opening:false, cameraGeneration:0, requestGeneration:0, controller:null, draft:null,
   records:[], total:0, examples:[], sampleIndex:0, map:null, markers:null, currentMarker:null, tiles:null,
-  printing:false, printer:{configured:false}, printedIds:new Set(), tab:"capture", led:false, historyGeneration:0, pollTimer:null, mapLoadTimer:null };
+  printing:false, deleting:false, pendingDelete:null, printer:{configured:false}, printedIds:new Set(), tab:"capture", led:false, historyGeneration:0, pollTimer:null, mapLoadTimer:null };
 const deviceToken = d('meta[name="app-token"]').content;
 const percent = value => `${(value*100).toFixed(1)}%`;
 const locationName = source => source === "simulated" ? "พิกัดจำลอง" : "พิกัดระบุเอง";
@@ -16,15 +16,15 @@ async function api(path, options={}) {
   return result;
 }
 function buttons() {
-  d("#analyze-scan").disabled=!device.ready || device.busy || device.opening || (!device.stream && !device.blob);
+  d("#analyze-scan").disabled=!device.ready || device.busy || device.opening || device.deleting || (!device.stream && !device.blob);
   d("#analyze-scan").textContent=device.busy ? "กำลังตรวจ…" : "◉ ถ่าย / ตรวจโรค";
-  d("#save-scan").disabled=!device.draft || !!device.draft.saved_at || device.busy || device.saving;
+  d("#save-scan").disabled=!device.draft || !!device.draft.saved_at || device.busy || device.saving || device.deleting;
   d("#save-scan").textContent=device.saving ? "กำลังบันทึก…" : device.draft?.saved_at ? "✓ บันทึกแล้ว" : "▣ บันทึกจุดตรวจ";
-  d("#print-scan").disabled=!device.draft?.saved_at || !device.printer.configured || device.printing || device.busy || device.saving;
+  d("#print-scan").disabled=!device.draft?.saved_at || !device.printer.configured || device.printing || device.busy || device.saving || device.deleting;
   d("#print-scan").textContent=device.printing ? "กำลังส่งพิมพ์…" : device.printedIds.has(device.draft?.id) ? "พิมพ์ซ้ำ" : "พิมพ์ผล";
-  d("#preview-receipt").disabled=!device.draft?.saved_at || device.printing;
+  d("#preview-receipt").disabled=!device.draft?.saved_at || device.printing || device.deleting;
   document.querySelectorAll("[data-print-scan]").forEach(button=>{
-    button.disabled=!device.printer.configured || device.printing;
+    button.disabled=!device.printer.configured || device.printing || device.deleting;
     button.textContent=device.printedIds.has(button.dataset.printScan) ? "พิมพ์ซ้ำ" : "พิมพ์ผล";
   });
   d("#open-camera").disabled=device.busy || !!device.stream || device.opening;
@@ -32,6 +32,10 @@ function buttons() {
   d("#close-camera").disabled=!device.stream && !device.opening;
   for(const id of ["#sample-image","#device-file"]) d(id).disabled=device.busy || device.saving;
   for(const id of ["#observer-severity","#scan-note"]) d(id).disabled=!!device.draft?.saved_at || device.saving;
+  document.querySelectorAll('[data-delete-scan]').forEach(button=>{button.disabled=device.deleting || device.printing || device.saving || device.busy;});
+  d('#cancel-delete').disabled=device.deleting;
+  d('#confirm-delete').disabled=device.deleting || !device.pendingDelete;
+  d('#confirm-delete').textContent=device.deleting ? 'กำลังลบ…' : 'ยืนยันลบรายการนี้';
 }
 function locationSnapshot() {
   const latitude=Number(d("#latitude").value),longitude=Number(d("#longitude").value);
@@ -127,6 +131,7 @@ function renderResult(row) {
   d("#result-location").textContent=`${locationName(row.location_source)} · ${row.latitude.toFixed(5)}, ${row.longitude.toFixed(5)}`;
   d("#result-state").textContent=row.saved_at ? "บันทึกแล้ว" : "ตรวจแล้ว · ยังไม่บันทึก";
   d("#observer-severity").value=row.severity;d("#scan-note").value=row.note;
+  PlantCare.summary(d("#result-care"),row.advice);
   buttons();
 }
 async function analyze() {
@@ -173,6 +178,10 @@ async function printScan(identifier) {
     device.printedIds.add(identifier);message(`${error.message} · ตรวจใบพิมพ์ก่อนกดพิมพ์ซ้ำ`,true);
   }finally{device.printing=false;buttons();}
 }
+async function openCare(identifier) {
+  try { const row=await api(`/api/device/scans/${encodeURIComponent(identifier)}`); PlantCare.open(row.advice); }
+  catch(error) { message(error.message,true); }
+}
 function markerColor(row) {
   if(row.severity==="severe")return "#d04f46";
   if(row.severity==="mild")return "#d4a21a";
@@ -184,7 +193,8 @@ function popup(row) {
   const box=document.createElement("div"),image=document.createElement("img"),title=document.createElement("strong"),detail=document.createElement("p");
   image.src=row.image_url;image.alt="ภาพใบพืชที่บันทึก";title.textContent=recordTitle(row);
   detail.textContent=`${locationName(row.location_source)} · ${dateText(row.captured_at)}${row.note ? " · "+row.note : ""}`;
-  box.append(image,title,detail);return box;
+  const care=document.createElement("button");care.textContent="ดูคำแนะนำ";care.addEventListener("click",()=>openCare(row.id));
+  box.append(image,title,detail,care);return box;
 }
 function initializeMap() {
   if(device.map)return;
@@ -253,7 +263,7 @@ function fitPoints() {if(device.markers?.getLayers().length)device.map.fitBounds
 function showTab(tab) {
   if(tab!=="capture"){cancelAnalysis();stopCamera();}
   device.tab=tab;
-  for(const name of ["capture","map","history","settings"])d(`#screen-${name}`).hidden=name!==tab;
+  for(const name of ["capture","map","history","care","settings"])d(`#screen-${name}`).hidden=name!==tab;
   document.querySelectorAll("[data-tab]").forEach(button=>{button.classList.toggle("active",button.dataset.tab===tab);button.setAttribute("aria-pressed",String(button.dataset.tab===tab));});
   if(tab==="map"){
     const firstVisit=!device.map;
@@ -263,6 +273,7 @@ function showTab(tab) {
   }
   if(tab==="history" || tab==="map")loadHistory().catch(error=>message(error.message,true));
   if(tab==="capture")updateGuide();
+  if(tab==="care")PlantCare.library(d("#care-library"));
 }
 function renderHistory() {
   d("#history-count").textContent=`ทั้งหมด ${device.total} จุด · แสดง ${device.records.length} รายการล่าสุด`;
@@ -280,11 +291,47 @@ function renderHistory() {
     const preview=document.createElement("button");preview.textContent="ดูใบผลตรวจ";preview.addEventListener("click",()=>previewReceipt(row.id));
     const print=document.createElement("button");print.dataset.printScan=row.id;print.textContent=device.printedIds.has(row.id) ? "พิมพ์ซ้ำ" : "พิมพ์ผล";
     print.disabled=!device.printer.configured || device.printing;print.addEventListener("click",()=>printScan(row.id));
-    actions.append(button,preview,print);
+    const care=document.createElement("button");care.textContent="ดูคำแนะนำ";care.dataset.careScan=row.id;care.addEventListener("click",()=>openCare(row.id));
+    const remove=document.createElement('button');remove.type='button';remove.className='delete-scan';remove.textContent='ลบรายการนี้';remove.dataset.deleteScan=row.id;
+    remove.disabled=device.deleting || device.printing || device.saving || device.busy;remove.addEventListener('click',()=>requestDelete(row));
+    actions.append(button,care,preview,print,remove);
     card.append(img,body,actions);d("#history-list").append(card);
   }
 }
 async function loadHistory() {const generation=++device.historyGeneration;const data=await api("/api/device/scans");if(generation!==device.historyGeneration)return;device.records=data.items;device.total=data.total;renderHistory();renderMap();}
+function requestDelete(row) {
+  if(device.deleting || device.printing || device.saving || device.busy || !row.saved_at)return;
+  device.pendingDelete=row;
+  d('#delete-image').src=row.image_url;
+  d('#delete-title').textContent=recordTitle(row);
+  d('#delete-time').textContent=dateText(row.captured_at);
+  d('#delete-location').textContent=`${locationName(row.location_source)} · ${row.latitude.toFixed(5)}, ${row.longitude.toFixed(5)}`;
+  d('#delete-id').textContent=`รหัสรายการ ${row.id.slice(0,12)}`;
+  d('#delete-error').hidden=true;buttons();
+  d('#delete-dialog').showModal();d('#cancel-delete').focus();
+}
+async function confirmDelete() {
+  if(device.deleting || !device.pendingDelete)return;
+  const identifier=device.pendingDelete.id;
+  device.deleting=true;d('#delete-error').hidden=true;buttons();
+  try {
+    const result=await api(`/api/device/scans/${encodeURIComponent(identifier)}/delete`,{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm_id:identifier})});
+    // Invalidate outstanding history requests before removing the exact saved item.
+    device.historyGeneration++;
+    const previous=device.records.length;
+    device.records=device.records.filter(row=>row.id!==identifier);
+    device.total=Math.max(0,device.total-(previous-device.records.length));
+    device.printedIds.delete(identifier);
+    if(device.draft?.id===identifier)clearResult();
+    device.map?.closePopup();renderHistory();renderMap();
+    device.pendingDelete=null;d('#delete-dialog').close();
+    try { await loadHistory();message(result.message); }
+    catch { message('ลบรายการแล้ว แต่รีเฟรชข้อมูลไม่สำเร็จ กรุณากดรีเฟรชประวัติ',true); }
+  }catch(error) {
+    d('#delete-error').textContent=error.message+' · ตรวจประวัติก่อนลองใหม่';d('#delete-error').hidden=false;
+  }finally {device.deleting=false;buttons();}
+}
 async function status() {
   clearTimeout(device.pollTimer);
   try {const data=await api("/api/status");device.ready=data.ready;d("#ai-status").textContent=data.ready ? "● AI พร้อมตรวจ" : "● ยังไม่มีโมเดล AI";}
@@ -306,6 +353,10 @@ document.querySelectorAll("[data-tab]").forEach(button=>button.addEventListener(
 d("#go-map").addEventListener("click",()=>showTab("map"));d("#fit-points").addEventListener("click",fitPoints);
 d("#map-filter").addEventListener("change",()=>{renderMap();fitPoints();});
 d("#refresh-history").addEventListener("click",()=>loadHistory().catch(error=>message(error.message,true)));
+d('#cancel-delete').addEventListener('click',()=>{if(!device.deleting)d('#delete-dialog').close();});
+d('#confirm-delete').addEventListener('click',confirmDelete);
+d('#delete-dialog').addEventListener('cancel',event=>{if(device.deleting)event.preventDefault();});
+d('#delete-dialog').addEventListener('close',()=>{device.pendingDelete=null;buttons();});
 d("#online-map").addEventListener("click",()=>setRoadMapEnabled(!device.tiles));
 d("#retry-map")?.addEventListener("click",()=>setRoadMapEnabled(true));
 for(const id of ["#latitude","#longitude","#location-source"])d(id).addEventListener("change",updateLocation);
@@ -316,4 +367,6 @@ d("#fullscreen").addEventListener("click",async()=>{try{if(document.fullscreenEl
 document.addEventListener("fullscreenchange",()=>{document.body.classList.toggle("kiosk",!!document.fullscreenElement);device.map?.invalidateSize();});
 document.addEventListener("visibilitychange",()=>{if(document.hidden){cancelAnalysis();stopCamera();}});
 window.addEventListener("pagehide",()=>{cancelAnalysis();stopCamera();releasePreview();clearTimeout(device.pollTimer);clearTimeout(device.mapLoadTimer);});
+d("#care-search").addEventListener("input",()=>PlantCare.library(d("#care-library")));
 updateLocation();status();loadHistory().catch(error=>message(error.message,true));
+if(location.hash==="#care")showTab("care");

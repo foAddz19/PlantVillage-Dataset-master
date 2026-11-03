@@ -103,3 +103,8 @@ $env:PADDY_TEST_MODEL_DIR = (Resolve-Path models\paddy).Path
 `tests/export_paddy_fixture.py` สร้างโมเดลสังเคราะห์เพื่อทดสอบการส่งออกในโฟลเดอร์ชั่วคราวเท่านั้น ไม่ใช่โมเดลตรวจโรคและห้ามนำไปใช้อ้างความแม่นยำ
 
 อ้างอิง: [Paddy Doctor repository](https://github.com/paddydoc/paddy-doctor-dataset), [ชุดแข่งขัน 10 คลาส](https://www.kaggle.com/competitions/paddy-disease-classification/data), [LiteRT Python CPU](https://developers.google.com/edge/litert/next/python), [integer quantization](https://developers.google.com/edge/litert/conversion/tensorflow/quantization/post_training_integer_quant)
+
+
+## คำแนะนำดูแลข้าว
+
+เพิ่มคู่มือออฟไลน์ 10 กลุ่ม คำแนะนำหลังวิเคราะห์ เปิดย้อนหลัง และสรุปท้ายใบพิมพ์แล้ว อ่านวิธีใช้ ขอบเขต และแหล่งอ้างอิงใน [CARE_GUIDE_TH.md](CARE_GUIDE_TH.md) ผลที่ยังไม่ชัดได้รับคำแนะนำตรวจเพิ่มก่อนเลือกวิธีจัดการเฉพาะโรค

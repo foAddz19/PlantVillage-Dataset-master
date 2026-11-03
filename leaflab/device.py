@@ -42,6 +42,15 @@ def device_routes(service, token, directory, printer):
             raise ValueError("ข้อมูลบันทึกไม่ถูกต้อง")
         return jsonify(store.save(identifier, data.get("severity", "unassessed"), data.get("note", "")))
 
+    @routes.post('/api/device/scans/<identifier>/delete')
+    def delete_scan(identifier):
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict) or set(data) != {'confirm_id'} or data['confirm_id'] != identifier:
+            raise ValueError('กรุณายืนยันรหัสรายการที่ต้องการลบเพียงรายการเดียว')
+        deleted = store.delete_saved(identifier)
+        return jsonify(id=identifier, deleted=deleted,
+                       message='ลบรายการและจุดตรวจบนแผนที่แล้ว' if deleted else 'รายการนี้ไม่อยู่ในประวัติแล้ว')
+
     @routes.get("/api/device/printer")
     def printer_status():
         return jsonify(printer.status())
@@ -90,14 +99,17 @@ def device_routes(service, token, directory, printer):
             raise ValueError("รองรับ CSV และ GeoJSON")
         output = io.StringIO(newline="")
         writer = csv.writer(output)
-        writer.writerow(("id", "captured_at", "crop", "disease", "score", "uncertain", "latitude", "longitude", "location_source", "severity_by_observer", "note", "model_created_at"))
+        writer.writerow(("id", "captured_at", "crop", "disease", "score", "uncertain", "latitude", "longitude", "location_source", "severity_by_observer", "note", "model_created_at",
+                         "care_version", "care_status", "care_basis", "care_next_steps", "care_sources"))
         for row in records:
             best = row["prediction"]["candidates"][0]
             note = row["note"]
             if note.lstrip().startswith(("=", "+", "-", "@")) or note.startswith(("\t", "\r", "\n")):
                 note = "'"+note
             writer.writerow((row["id"], row["captured_at"], best["crop_th"], best["disease_th"], best["score"],
-                             row["prediction"]["uncertain"], row["latitude"], row["longitude"], row["location_source"], row["severity"], note, row["prediction"]["model_created_at"]))
+                             row["prediction"]["uncertain"], row["latitude"], row["longitude"], row["location_source"], row["severity"], note, row["prediction"]["model_created_at"],
+                             row['advice']['knowledge_version'], row['advice']['status'], row['advice']['basis'],
+                             ' | '.join(row['advice']['next_steps']), ' | '.join(source['url'] for source in row['advice']['sources'])))
         return Response("\ufeff"+output.getvalue(), mimetype="text/csv", headers={"Content-Disposition": 'attachment; filename="plant-scans.csv"'})
 
     return routes

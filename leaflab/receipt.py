@@ -9,6 +9,7 @@ from functools import lru_cache
 from PIL import Image, ImageChops, ImageDraw
 
 from .dataset import ROOT
+from .care import advice_for_record
 
 FONT_PATH = ROOT / 'assets' / 'fonts' / 'NotoSansThai.ttf'
 
@@ -219,6 +220,18 @@ def receipt_layout(row, width=384):
     text('ประเมินโดยผู้ตรวจ','small')
     if row.get('note'):
         space(8);text('หมายเหตุ','strong');text(row['note'][:500],'body')
+    rule()
+    care = advice_for_record(row)
+    text('คำแนะนำดูแลเบื้องต้น','strong')
+    if care['urgent']:
+        text('ผู้ตรวจระบุรุนแรง ติดต่อเจ้าหน้าที่โดยเร็ว','small')
+    if care['status'] in ('uncertain', 'unsupported'):
+        text('ยังไม่เลือกวิธีจัดการเฉพาะโรค','small')
+    for index, line in enumerate(care['receipt_lines'][:2 if width < 320 else 3], 1):
+        text(f'{index}. {line}','small')
+    text('ดูรายละเอียดและอ้างอิงในแอป','small')
+    basis = 'ฉบับคู่มือปัจจุบัน' if care['basis'] == 'current_reference' else 'ฉบับเก็บพร้อมผลตรวจ'
+    text(basis+' '+care['knowledge_version'],'small')
     rule()
     text('คะแนน AI ไม่ใช่โอกาสยืนยันโรค','small')
     text('ควรตรวจอาการจริงประกอบ','small')

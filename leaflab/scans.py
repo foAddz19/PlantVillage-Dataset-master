@@ -7,6 +7,8 @@ from contextlib import closing
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
+from .care import advice_for_prediction, advice_for_record
+
 
 def location_fields(data):
     mode = data.get("location_source", "simulated")
@@ -28,13 +30,14 @@ def location_fields(data):
 
 
 class ScanStore:
-    COLUMNS = "id, captured_at, saved_at, source, latitude, longitude, location_source, prediction, severity, note"
+    COLUMNS = "id, captured_at, saved_at, source, latitude, longitude, location_source, prediction, severity, note, advice"
 
     def __init__(self, directory):
         directory = Path(directory)
         directory.mkdir(parents=True, exist_ok=True)
         self.path = directory / "scans.sqlite3"
         with self.connection() as db, db:
+            db.execute("BEGIN IMMEDIATE")
             db.execute("""CREATE TABLE IF NOT EXISTS scans (
                 id TEXT PRIMARY KEY, captured_at TEXT NOT NULL, saved_at TEXT,
                 source TEXT NOT NULL, latitude REAL NOT NULL, longitude REAL NOT NULL,
@@ -42,6 +45,9 @@ class ScanStore:
                 severity TEXT NOT NULL DEFAULT 'unassessed', note TEXT NOT NULL DEFAULT '',
                 image BLOB NOT NULL, mime TEXT NOT NULL)""")
             db.execute("CREATE INDEX IF NOT EXISTS scans_saved ON scans(saved_at)")
+            # Additive migration: never rewrite old images, predictions, notes or timestamps.
+            if 'advice' not in {row['name'] for row in db.execute('PRAGMA table_info(scans)')}:
+                db.execute('ALTER TABLE scans ADD COLUMN advice TEXT')
 
     def connection(self):
         db = sqlite3.connect(self.path, timeout=15)
@@ -52,6 +58,8 @@ class ScanStore:
     def decode(row):
         value = dict(row)
         value["prediction"] = json.loads(value["prediction"])
+        value['advice'] = json.loads(value['advice']) if value.get('advice') else None
+        value['advice'] = advice_for_record(value)
         value["image_url"] = f"/api/device/scans/{value['id']}/image"
         return value
 
@@ -63,10 +71,11 @@ class ScanStore:
             db.execute("DELETE FROM scans WHERE saved_at IS NULL AND captured_at < ?",
                        ((datetime.now(timezone.utc)-timedelta(days=1)).isoformat(),))
             db.execute("""INSERT INTO scans
-                (id,captured_at,source,latitude,longitude,location_source,prediction,image,mime)
-                VALUES (?,?,?,?,?,?,?,?,?)""",
+                (id,captured_at,source,latitude,longitude,location_source,prediction,image,mime,advice)
+                VALUES (?,?,?,?,?,?,?,?,?,?)""",
                 (identifier, now, source, location["latitude"], location["longitude"], location["location_source"],
-                 json.dumps(prediction, ensure_ascii=False), payload, mime))
+                 json.dumps(prediction, ensure_ascii=False), payload, mime,
+                 json.dumps(advice_for_prediction(prediction), ensure_ascii=False)))
         return self.get(identifier)
 
     def get(self, identifier):
@@ -92,6 +101,14 @@ class ScanStore:
             db.execute("UPDATE scans SET saved_at=?,severity=?,note=? WHERE id=? AND saved_at IS NULL",
                        (datetime.now(timezone.utc).isoformat(), severity, note.strip(), identifier))
         return self.get(identifier)
+
+    def delete_saved(self, identifier):
+        """Delete at most one saved UUID, including its image and advice snapshot."""
+        if not isinstance(identifier, str) or len(identifier) != 32 or any(char not in '0123456789abcdef' for char in identifier):
+            raise ValueError('รหัสรายการที่ต้องการลบไม่ถูกต้อง')
+        with self.connection() as db, db:
+            cursor = db.execute('DELETE FROM scans WHERE id=? AND saved_at IS NOT NULL', (identifier,))
+            return cursor.rowcount == 1
 
     def list(self, limit=200):
         with self.connection() as db:

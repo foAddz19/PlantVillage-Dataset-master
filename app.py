@@ -15,6 +15,7 @@ from werkzeug.exceptions import HTTPException
 from leaflab.dataset import Catalog, ROOT
 from leaflab.images import read_image
 from leaflab.device import device_routes
+from leaflab.care import advice_for_prediction, library as care_library, guide as care_guide
 
 
 def create_app(catalog=None, service=None, data_dir=None, *, model_backend=None,
@@ -184,7 +185,8 @@ def create_app(catalog=None, service=None, data_dir=None, *, model_backend=None,
         if len(payload) > 8 * 1024 * 1024:
             return jsonify(error="กรุณาใช้ภาพไม่เกิน 8 MB"), 413
         image = read_image(io.BytesIO(payload))
-        return jsonify({**service.predict(image), "source": "upload"})
+        prediction = service.predict(image)
+        return jsonify({**prediction, "advice": advice_for_prediction(prediction), "source": "upload"})
 
     @app.post("/api/predict-example")
     def predict_example():
@@ -197,7 +199,15 @@ def create_app(catalog=None, service=None, data_dir=None, *, model_backend=None,
             artifact = service.artifact
         split = next((row["split"] for row in (artifact or {}).get("manifest", [])
                       if row["path"] == record_key(label, path)), "unused")
-        return jsonify({**prediction, "source": "dataset", "actual_label": label, "split": split})
+        return jsonify({**prediction, "advice": advice_for_prediction(prediction), "source": "dataset", "actual_label": label, "split": split})
+
+    @app.get('/api/care/library')
+    def care_catalog():
+        return jsonify(care_library())
+
+    @app.get('/api/care/<key>')
+    def care_detail(key):
+        return jsonify(care_guide(key))
 
     @app.post("/api/train")
     def train():

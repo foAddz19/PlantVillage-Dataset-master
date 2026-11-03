@@ -9,8 +9,10 @@
   <link rel="icon" href="{{ url_for('static', filename='leaf.svg') }}" type="image/svg+xml">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='camera.css') }}">
+  <link rel="stylesheet" href="/static/care.css?v=20261102-care1">
+  <script src="/static/care.js?v=20261102-care1" defer></script>
   <script src="{{ url_for('static', filename='camera.js') }}" defer></script>
-  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='app.js') }}?v=20261102-care1" defer></script>
 </head>
 <body>
   <aside class="sidebar">
@@ -19,6 +21,7 @@
     <nav aria-label="เมนูหลัก">
       <a class="nav-item" href="/device"><span class="nav-icon">▣</span> เครื่องตรวจจำลอง + แผนที่</a>
       <button class="nav-item active" data-view="analyze"><span class="nav-icon">⌕</span> วิเคราะห์ใบพืช <span class="nav-arrow">↗</span></button>
+      <a class="nav-item" href="/device#care"><span class="nav-icon">✧</span> คู่มือดูแลข้าว</a>
       <button class="nav-item" data-view="library"><span class="nav-icon">▦</span> สำรวจชุดข้อมูล</button>
       <button class="nav-item" data-view="model"><span class="nav-icon">◈</span> โมเดลของฉัน</button>
     </nav>
@@ -71,7 +74,7 @@
                 </div>
               </div>
               <div class="prediction-main"><div id="prediction-heading" class="eyebrow">ผลที่ได้คะแนนสูงสุด</div><h3 id="pred-disease"></h3><p id="pred-crop"></p><code id="pred-label"></code></div>
-              <div class="ranking-label">3 ผลลัพธ์ที่ใกล้เคียง <span>คะแนนโมเดล</span></div><div id="candidates"></div><p class="result-footnote">คะแนนนี้ไม่ใช่โอกาสยืนยันโรค โมเดลเลือกจากกลุ่มที่รู้จักเสมอ และยังแยกภาพที่ไม่ใช่ใบพืชไม่ได้</p><div id="sample-note" class="sample-note" hidden></div><button id="download-result" class="secondary-button">บันทึกผลวิเคราะห์ ↓</button>
+              <div class="ranking-label">3 ผลลัพธ์ที่ใกล้เคียง <span>คะแนนโมเดล</span></div><div id="candidates"></div><div id="lab-care" hidden></div><p class="result-footnote">คะแนนนี้ไม่ใช่โอกาสยืนยันโรค โมเดลเลือกจากกลุ่มที่รู้จักเสมอ และยังแยกภาพที่ไม่ใช่ใบพืชไม่ได้</p><div id="sample-note" class="sample-note" hidden></div><button id="download-result" class="secondary-button">บันทึกผลวิเคราะห์ ↓</button>
             </div>
           </section>
         </div>
