@@ -3,7 +3,7 @@
 **พิมพ์ใบผลตรวจ:** รองรับการส่ง ESC/POS ผ่าน USB พร้อมฟอนต์ไทย ดู [PRINTER_GUIDE_TH.md](PRINTER_GUIDE_TH.md) เมื่อย้ายไป Pi ให้ใช้แพ็กเกจ `dist/ai-plant-pi.zip` ซึ่งรวม `assets/fonts/`, `config/printer.example.json`, `printer_tools.py` และ `requirements-printer.txt` แล้ว การฝึกโมเดลตามคู่มือนี้ทำบน PC ที่เก็บโปรเจกต์ต้นฉบับ
 
 
-ผลโมเดลที่ฝึกจาก ZIP บนเครื่องนี้และผลวัด RAM/เวลา อยู่ใน [PADDY_MODEL_REPORT_TH.md](PADDY_MODEL_REPORT_TH.md)
+โมเดลที่ให้มาปัจจุบันเป็นชุดแข่งขัน **10 กลุ่ม** ได้ INT8 test **88.64% (1,373/1,549 ภาพ)** เทียบกับรุ่นก่อน 75.98% ใช้ MobileNetV2 alpha 0.5, ภาพ 160×160 และน้ำหนัก 1,005,784 bytes เท่าเดิม ผลนี้วัดบน benchmark เดิม ยังไม่ใช่ความแม่นยำจากกล้องภาคสนาม ดู [ผลโมเดล](PADDY_MODEL_REPORT_TH.md) และ [รายงาน Optimize](PADDY_OPTIMIZATION_REPORT_TH.md)
 
 โปรเจกต์มี backend สองชุด แยกน้ำหนักและไลบรารีที่โหลด:
 
@@ -42,11 +42,13 @@
 
 ไลบรารีสำหรับเว็บอยู่ใน `.venv` และสำหรับฝึกอยู่ใน `.venv-training` อย่าฝึกบน Raspberry Pi RAM 2GB
 
+คำสั่งด้านล่างใช้สร้างรุ่นต้นแบบตามวิธีเดิม ก่อน Optimize โดยเขียนผลลงโฟลเดอร์ทดลอง ไม่แทนโมเดลที่แอปใช้อยู่:
+
 ```powershell
 py -3.13 -m venv .venv-training
 .venv-training\Scripts\python.exe -m pip install -r requirements-training.txt
 .venv-training\Scripts\python.exe train_paddy.py --dataset datasets\paddy-competition --check-data
-.venv-training\Scripts\python.exe train_paddy.py --dataset datasets\paddy-competition --epochs 15 --image-size 160 --batch-size 32 --fine-tune-epochs 4
+.venv-training\Scripts\python.exe train_paddy.py --dataset datasets\paddy-competition --output runtime\paddy-original-reproduction --epochs 15 --image-size 160 --batch-size 32 --fine-tune-epochs 4
 ```
 
 ตัวฝึกรองรับ `root/class/*.jpg`, `root/train_images/class/*.jpg`, โฟลเดอร์ `train/validation/test` และ CSV ที่มี `image_id`/`filename`/`path` พร้อม `label` ถ้ามี `leaf_id`, `plant_id` หรือ `group` จะใช้รวมภาพก่อนแบ่งชุด มีการตรวจภาพซ้ำข้ามคลาสและข้ามชุด รวมถึงเส้นทางที่หลุดออกนอกโฟลเดอร์ข้อมูล
@@ -57,13 +59,51 @@ py -3.13 -m venv .venv-training
 
 หลังฝึกจะประเมินทั้งโมเดล float และ INT8 บนชุดทดสอบเดียวกัน หน้าเว็บแสดงผลของ **ไฟล์ INT8 ที่ส่งออกจริง** ไม่ใช้คะแนนของ float แทน มีค่า confidence threshold เริ่มต้น 0.6 และระยะห่างอันดับ 1–2 ที่ 0.15 ซึ่งยังไม่ผ่านการปรับเทียบจากภาพภาคสนาม
 
-ไฟล์ผลลัพธ์:
+ไฟล์ที่ตัวฝึกสร้างในโฟลเดอร์ `--output` (ตัวอย่างนี้คือ `runtime/paddy-original-reproduction`):
 
-- `models/paddy/model.json`: ลำดับคลาส, ขนาดภาพ, dtype, quantization, SHA256, ผลทดสอบและรายการแบ่งชุด
-- `models/paddy/paddy-<hash>.tflite`: น้ำหนัก fully integer สำหรับวิเคราะห์
-- `models/paddy/paddy-<hash>.keras`: โมเดลแก้ไขได้บน PC ไม่ต้องนำไป Pi
+- `model.json`: ลำดับคลาส, ขนาดภาพ, dtype, quantization, SHA256, ผลทดสอบและรายการแบ่งชุด
+- `paddy-<hash>.tflite`: น้ำหนัก fully integer สำหรับวิเคราะห์
+- `paddy-<hash>.keras`: โมเดลแก้ไขได้บน PC ไม่ต้องนำไป Pi
 
 Preprocessing: อ่านภาพพร้อม EXIF, แปลง RGB, ย่อแบบ bilinear/stretch เป็นขนาดใน JSON, ส่งค่า RGB ช่วง 0–255 ผ่าน input quantization; การแปลงเป็นช่วง −1 ถึง 1 อยู่ในโมเดล ห้ามหาร 255 ซ้ำก่อนส่งเข้าโมเดล
+
+## Optimize ต่อโดยไม่เพิ่มขนาดโมเดล
+
+คำสั่งนี้รันบน PC จากโปรเจกต์ต้นฉบับที่มีชุดภาพและ `.venv-training` ใช้รุ่นเดิมที่สำรองไว้พร้อม manifest คงที่ จำกัด CPU 2 logical CPUs, batch 8 และคง input 160×160 / alpha 0.5:
+
+```powershell
+.venv-training\Scripts\python.exe optimize_paddy.py --baseline-dir models\backups\paddy-before-optimize-20261103 --dataset-dir datasets\paddy-competition --output runtime\paddy-optimize-next --epochs 12 --unfreeze-layers 60 --learning-rate 0.00003 --batch-size 8 --threads 2 --calibration-images 512 --max-memory-mib 1800
+```
+
+ตัวฝึกคง BatchNormalization ให้หยุดเรียนรู้ เก็บ checkpoint ตาม validation accuracy และ loss ลด learning rate เมื่อ validation loss ไม่ดีขึ้น และเลือกจาก **INT8 validation** หลังใช้ภาพ train แบบแบ่งกลุ่ม 512 ภาพทำ calibration ตัวเลข `--max-memory-mib` เป็นเกณฑ์สั่งหยุดที่ตรวจระหว่างฝึก ไม่ใช่การจองหรือจำกัด RAM แบบตายตัวตลอดการโหลด/แปลงโมเดล
+
+เมื่อจบ ดู `runtime/paddy-optimize-next/selection.json` แล้วตรวจผู้ชนะด้วยตัวประเมินที่ตรวจ manifest/hash ตัวอย่าง PowerShell:
+
+```powershell
+$experimentPath = 'runtime\paddy-optimize-next'
+$selection = Get-Content -LiteralPath "$experimentPath\selection.json" -Raw -Encoding UTF8 | ConvertFrom-Json
+$candidatePath = Join-Path $experimentPath $selection.selected.checkpoint
+.venv\Scripts\python.exe evaluate_paddy_candidate.py --baseline-dir models\backups\paddy-before-optimize-20261103 --model-dir "$candidatePath" --dataset-dir datasets\paddy-competition --split validation --output "$experimentPath\selected-validation.json"
+```
+
+เมื่อเลือกค่าฝึกและรุ่นเสร็จแล้วจึงใช้ `--split test` ยืนยันผลของรุ่นนั้น ห้ามวนปรับค่าจากคะแนน test เพื่อให้ผ่านเป้าหมาย เก็บผล validation/test แยกชื่อและระบุ split เสมอ ชุด test นี้เคยรายงานคะแนนรุ่นก่อนแล้ว จึงไม่ใช่ชุดข้อมูลภาคสนามใหม่
+
+ผลในโฟลเดอร์ทดลองยังไม่ถูกเผยแพร่: `deployment_ready=False` และค่า `metadata.accuracy` ของไฟล์ทดลองเป็น **validation** ก่อนนำไปใช้จริงต้องยืนยัน test และปรับ metadata ให้เป็นผล test ที่ตรวจแล้ว พร้อมคัดลอก `.tflite` และ `model.json` เป็นคู่ รุ่นที่ให้มาปัจจุบันผ่านขั้นตอนนี้แล้ว ดูไฟล์ผลจริงใน [รายงานโมเดล](PADDY_MODEL_REPORT_TH.md)
+
+## อัปเดตและย้อนกลับโมเดล
+
+อัปเดตเฉพาะ `models/paddy/model.json` และ `.tflite` ที่ JSON อ้างถึง โดยปิดแอปก่อนและเปิดใหม่หลังอัปเดต เก็บโฟลเดอร์ `data/` ของเครื่องใช้งานไว้ ประวัติสำรวจไม่ต้องลบหรือแปลงตามโมเดล
+
+รุ่นก่อน Optimize อยู่ที่ `models/backups/paddy-before-optimize-20261103` บน PC ต้นฉบับ หากต้องย้อนกลับ ให้ปิดแอปด้วย `stop.bat` แล้วคัดลอกน้ำหนักก่อน config:
+
+```powershell
+$backupPath = 'models\backups\paddy-before-optimize-20261103'
+$backupConfig = Get-Content -LiteralPath "$backupPath\model.json" -Raw -Encoding UTF8 | ConvertFrom-Json
+Copy-Item -LiteralPath (Join-Path $backupPath $backupConfig.model_file) -Destination 'models\paddy'
+Copy-Item -LiteralPath (Join-Path $backupPath 'model.json') -Destination 'models\paddy\model.json'
+```
+
+จากนั้นเปิด `start_paddy.bat` ใหม่ บน Pi ให้สำรองคู่ไฟล์ที่ใช้อยู่ก่อนอัปเดตเช่นกัน แพ็กเกจ Pi ไม่รวมโฟลเดอร์ backup บน PC
 
 ## Raspberry Pi 5 RAM 2GB
 
@@ -93,12 +133,14 @@ sh start_pi.sh
 
 ## ทดสอบ
 
+บน PC โปรเจกต์ต้นฉบับ ชุดตรวจด้านล่างผ่าน 64 กรณี ครอบคลุมโมเดลข้าวจริง การรักษา manifest/calibration คงที่ หน้าอุปกรณ์ คู่มือดูแล การพิมพ์ และการลบรายรายการ โดยไม่โหลดตัวจำแนก PlantVillage ขนาดใหญ่:
+
 ```powershell
-.venv\Scripts\python.exe -m unittest discover -s tests -v
-# ทดสอบ LiteRT กับโมเดลจริงเพิ่ม:
 $env:PADDY_TEST_MODEL_DIR = (Resolve-Path models\paddy).Path
-.venv\Scripts\python.exe -m unittest tests.test_paddy -v
+.venv\Scripts\python.exe -B -m unittest tests.test_optimization tests.test_paddy tests.test_device tests.test_care tests.test_printing tests.test_delete -v
 ```
+
+การพิมพ์ในชุดทดสอบใช้ USB จำลอง ยังต้องทดสอบเครื่องพิมพ์และ Raspberry Pi จริงแยกต่างหาก
 
 `tests/export_paddy_fixture.py` สร้างโมเดลสังเคราะห์เพื่อทดสอบการส่งออกในโฟลเดอร์ชั่วคราวเท่านั้น ไม่ใช่โมเดลตรวจโรคและห้ามนำไปใช้อ้างความแม่นยำ
 

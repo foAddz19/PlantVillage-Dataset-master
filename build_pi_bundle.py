@@ -16,13 +16,17 @@ def build(output):
         raise ValueError('Paddy model path/hash mismatch')
     required=['app.py','start_pi.sh','requirements-pi.txt','requirements-printer.txt','printer_tools.py',
               'benchmark_paddy.py','CARE_GUIDE_TH.md','PADDY_GUIDE_TH.md','PADDY_MODEL_REPORT_TH.md','PRINTER_GUIDE_TH.md',
+              'PADDY_OPTIMIZATION_REPORT_TH.md',
               'config/printer.example.json','models/paddy/model.json',model.relative_to(ROOT).as_posix(),
               'leaflab/care.py','leaflab/care_knowledge.json','static/care.js','static/care.css']
     files={ROOT/name for name in required}
     for folder in ('leaflab','templates','static','assets/fonts'):
         files.update(p for p in (ROOT/folder).rglob('*') if p.is_file() and '__pycache__' not in p.parts and p.suffix!='.pyc')
     for name in ('paddy-prediction.png','paddy-report.png','paddy-mobile.png','paddy-benchmark-windows.json','receipt-demo.png',
-                 'care-guide-desktop.png','care-receipt.png'):
+                 'care-guide-desktop.png','care-receipt.png',
+                 'paddy-optimized-test.json','paddy-optimized-validation.json','paddy-optimized-float-test.json',
+                 'paddy-optimized-benchmark-windows.json','paddy-baseline-benchmark-windows.json',
+                 'paddy-optimization-selection.json','paddy-optimization-history.json','paddy-optimization-release.json'):
         optional=ROOT/'test-results'/name
         if optional.is_file():files.add(optional)
     if not all(p.is_file() for p in files):raise ValueError('Missing deployment files')
@@ -39,6 +43,8 @@ def build(output):
   .venv/bin/python -m pip install -r requirements-pi.txt
   sh start_pi.sh
 เปิด Chromium บน Pi ที่ http://127.0.0.1:8765/device
+ผล Optimize โมเดลและขอบเขตการวัด: อ่าน PADDY_OPTIMIZATION_REPORT_TH.md
+หากอัปเดตเครื่องเดิม ให้คงโฟลเดอร์ data/ และ config/printer.json ของเครื่องนั้นไว้ แล้วเริ่มแอปใหม่
 ลบข้อมูลทีละรายการ: ประวัติ > ลบรายการนี้ > ตรวจภาพ/วันเวลา > ยืนยันลบรายการนี้ (ไม่มีปุ่มลบทั้งหมด)
 คู่มือดูแลข้าว: เปิดแท็บคู่มือดูแล อ่าน CARE_GUIDE_TH.md สำหรับขอบเขตและแหล่งอ้างอิง
 การติดตั้งเครื่องพิมพ์: อ่าน PRINTER_GUIDE_TH.md ก่อนสั่ง test-print
