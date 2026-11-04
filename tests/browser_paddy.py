@@ -29,7 +29,7 @@ with tempfile.TemporaryDirectory() as directory:
             page = browser.new_page(viewport={'width':1440,'height':1000})
             errors = []
             page.on('pageerror', lambda error: errors.append(str(error)))
-            page.goto(f'http://127.0.0.1:{server.server_port}', wait_until='networkidle')
+            page.goto(f'http://127.0.0.1:{server.server_port}/lab', wait_until='networkidle')
             expect(page.locator('#pill-text')).to_have_text('โมเดลพร้อมใช้งาน')
             expect(page.locator('#quick-samples .sample-card')).to_have_count(6)
             page.locator('#quick-samples button').first.click()

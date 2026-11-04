@@ -129,7 +129,7 @@ sh start_pi.sh
 
 โมเดล PlantVillage เดิมแม้ไฟล์บีบอัดประมาณ 280 MiB แต่ข้อมูลต้นไม้เมื่อโหลดใช้ราว 1.8 GiB และเคยวัดยอดการโหลดสูงกว่า 3 GiB บน PC จึงไม่เหมาะกับ Pi 2GB ควรเปิดด้วย `--model paddy` เสมอ
 
-กล้องขณะนี้ใช้ browser getUserMedia ผ่าน localhost ต้องมี Chromium และกล้องที่ระบบมองเห็น ยังไม่ได้เพิ่ม Picamera2, GPIO LED, GPS จริง หรือวงจรวัดแบตเตอรี่ แผนที่ภายนอกต้องใช้อินเทอร์เน็ต ส่วน inference ไม่ต้องใช้อินเทอร์เน็ตเมื่อมีไฟล์โมเดลแล้ว
+กล้องขณะนี้ใช้ browser getUserMedia ผ่าน localhost ต้องมี Chromium และกล้องที่ระบบมองเห็น ยังไม่ได้เพิ่ม Picamera2, GPIO LED, GPS จริง หรือวงจรวัดแบตเตอรี่ แผนที่ใช้ไฟล์ MBTiles ใน `maps/` แบบออฟไลน์ตามขอบเขตที่ติดตั้ง ดู [OFFLINE_MAP_GUIDE_TH.md](OFFLINE_MAP_GUIDE_TH.md) ส่วน inference ไม่ต้องใช้อินเทอร์เน็ตเมื่อมีไฟล์โมเดลแล้ว
 
 ## ทดสอบ
 
@@ -137,7 +137,7 @@ sh start_pi.sh
 
 ```powershell
 $env:PADDY_TEST_MODEL_DIR = (Resolve-Path models\paddy).Path
-.venv\Scripts\python.exe -B -m unittest tests.test_optimization tests.test_paddy tests.test_device tests.test_care tests.test_printing tests.test_delete -v
+.venv\Scripts\python.exe -B -m unittest tests.test_offline_maps tests.test_optimization tests.test_paddy tests.test_device tests.test_care tests.test_printing tests.test_delete -v
 ```
 
 การพิมพ์ในชุดทดสอบใช้ USB จำลอง ยังต้องทดสอบเครื่องพิมพ์และ Raspberry Pi จริงแยกต่างหาก

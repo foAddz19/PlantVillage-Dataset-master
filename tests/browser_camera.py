@@ -9,7 +9,7 @@ from playwright.sync_api import expect, sync_playwright
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "test-results"
 OUTPUT.mkdir(exist_ok=True)
-URL = "http://127.0.0.1:8765"
+URL = "http://127.0.0.1:8765/lab"
 
 INSTRUMENT = """(() => {
   window.cameraRequests = [];
@@ -61,7 +61,7 @@ with sync_playwright() as playwright:
     errors = []
     active_requests, max_active = set(), [0]
     def began(request):
-        if request.url == URL + "/api/predict":
+        if request.url == URL.removesuffix("/lab") + "/api/predict":
             active_requests.add(request)
             max_active[0] = max(max_active[0], len(active_requests))
     page.on("request", began)

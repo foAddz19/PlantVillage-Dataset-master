@@ -1,12 +1,13 @@
 "use strict";
 const d = selector => document.querySelector(selector);
-const device = { ready:false, busy:false, saving:false, blob:null, source:"upload", preview:null,
+const device = { ready:false, busy:false, capturing:false, saving:false, blob:null, source:"upload", preview:null,
   stream:null, opening:false, cameraGeneration:0, requestGeneration:0, controller:null, draft:null,
   records:[], total:0, examples:[], sampleIndex:0, map:null, markers:null, currentMarker:null, tiles:null,
-  printing:false, deleting:false, pendingDelete:null, printer:{configured:false}, printedIds:new Set(), tab:"capture", led:false, historyGeneration:0, pollTimer:null, mapLoadTimer:null };
+  mapEnabled:false, mapInfo:null, mapGeneration:0, mapController:null, coverageLayer:null, mapTileState:"loading",
+  printing:false, deleting:false, pendingDelete:null, printer:{configured:false}, printedIds:new Set(), tab:"home", led:false, historyGeneration:0, pollTimer:null, mapLoadTimer:null };
 const deviceToken = d('meta[name="app-token"]').content;
 const percent = value => `${(value*100).toFixed(1)}%`;
-const locationName = source => source === "simulated" ? "พิกัดจำลอง" : "พิกัดระบุเอง";
+const locationName = source => source === "simulated" ? "พิกัดจำลอง" : source === "gps" ? "GPS จริง" : "พิกัดระบุเอง";
 const dateText = value => new Date(value).toLocaleString("th-TH");
 function message(text, error=false) { d("#device-message").textContent=text; d("#device-message").classList.toggle("error",error); d("#device-message").hidden=false; clearTimeout(message.timer); message.timer=setTimeout(()=>{d("#device-message").hidden=true;},6000); }
 async function api(path, options={}) {
@@ -16,10 +17,10 @@ async function api(path, options={}) {
   return result;
 }
 function buttons() {
-  d("#analyze-scan").disabled=!device.ready || device.busy || device.opening || device.deleting || (!device.stream && !device.blob);
-  d("#analyze-scan").textContent=device.busy ? "กำลังตรวจ…" : "◉ ถ่าย / ตรวจโรค";
+  d("#analyze-scan").disabled=!device.ready || device.busy || device.capturing || device.opening || device.deleting || device.saving || !!device.stream || !device.blob;
+  d("#analyze-scan").textContent=device.busy ? "กำลังวิเคราะห์…" : "วิเคราะห์โรค";
   d("#save-scan").disabled=!device.draft || !!device.draft.saved_at || device.busy || device.saving || device.deleting;
-  d("#save-scan").textContent=device.saving ? "กำลังบันทึก…" : device.draft?.saved_at ? "✓ บันทึกแล้ว" : "▣ บันทึกจุดตรวจ";
+  d("#save-scan").textContent=device.saving ? "กำลังบันทึก…" : device.draft?.saved_at ? "✓ บันทึกแล้ว" : "บันทึกผล";
   d("#print-scan").disabled=!device.draft?.saved_at || !device.printer.configured || device.printing || device.busy || device.saving || device.deleting;
   d("#print-scan").textContent=device.printing ? "กำลังส่งพิมพ์…" : device.printedIds.has(device.draft?.id) ? "พิมพ์ซ้ำ" : "พิมพ์ผล";
   d("#preview-receipt").disabled=!device.draft?.saved_at || device.printing || device.deleting;
@@ -36,21 +37,22 @@ function buttons() {
   d('#cancel-delete').disabled=device.deleting;
   d('#confirm-delete').disabled=device.deleting || !device.pendingDelete;
   d('#confirm-delete').textContent=device.deleting ? 'กำลังลบ…' : 'ยืนยันลบรายการนี้';
+  DeviceUI.sync(device);
 }
 function locationSnapshot() {
   const latitude=Number(d("#latitude").value),longitude=Number(d("#longitude").value);
-  if(!d("#latitude").value.trim() || !d("#longitude").value.trim() || !Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude)>90 || Math.abs(longitude)>180) throw new Error("กรุณาระบุพิกัดให้ถูกต้องในหน้าตั้งค่าจำลอง");
+  if(!d("#latitude").value.trim() || !d("#longitude").value.trim() || !Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude)>90 || Math.abs(longitude)>180) throw new Error("กรุณาระบุพิกัดให้ถูกต้องในหน้าตั้งค่า");
   return {latitude,longitude,location_source:d("#location-source").value};
 }
 function updateLocation() {
   try {
-    const point=locationSnapshot(); d("#gps-status").textContent=`${locationName(point.location_source)} · ${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)}`;
+    const point=locationSnapshot(); d("#location-summary").textContent=`${locationName(point.location_source)} · ${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)}`;
     if(device.map) {
       if(device.currentMarker) device.currentMarker.remove();
       device.currentMarker=L.circleMarker([point.latitude,point.longitude],{radius:12,color:"#245c55",weight:2,dashArray:"4 4",fill:false}).addTo(device.map);
-      device.currentMarker.bindTooltip("ตำแหน่งปัจจุบัน · ยังไม่บันทึก");
+      device.currentMarker.bindTooltip(`${locationName(point.location_source)} · พิกัดสำหรับภาพถัดไป ยังไม่บันทึก`);
     }
-  } catch { d("#gps-status").textContent="พิกัดไม่ถูกต้อง"; }
+  } catch { d("#location-summary").textContent="พิกัดไม่ถูกต้อง · ตรวจการตั้งค่า"; }
 }
 function releasePreview() { if(device.preview) URL.revokeObjectURL(device.preview); device.preview=null; }
 function clearResult() { device.draft=null; d("#device-result").hidden=true; d("#device-result-empty").hidden=false; d("#result-state").textContent="ยังไม่ได้ตรวจ"; d("#observer-severity").value="unassessed"; d("#scan-note").value=""; buttons(); }
@@ -89,7 +91,7 @@ async function openCamera() {
     stream.getVideoTracks().forEach(track=>track.addEventListener("ended",()=>{if(device.stream===stream){cancelAnalysis();stopCamera();message("กล้องถูกตัดการเชื่อมต่อ",true);}}));
     releasePreview(); device.blob=null; device.source="camera"; clearResult(); device.opening=false;
     d("#device-video").hidden=false; d("#device-preview").hidden=true; d("#camera-empty").hidden=true;
-    d("#source-label").textContent="ภาพสดจากกล้อง"; updateGuide(); buttons(); message("กล้องพร้อมแล้ว วางใบพืชในกรอบแล้วกดตรวจโรค");
+    d("#source-label").textContent="ภาพสดจากกล้อง"; updateGuide(); buttons(); message("กล้องพร้อมแล้ว วางใบข้าวในกรอบแล้วกดถ่ายภาพ");
   } catch(error) {
     if(generation!==device.cameraGeneration)return;
     stopCamera(); message(({NotAllowedError:"ไม่ได้รับอนุญาตให้ใช้กล้อง",NotFoundError:"ไม่พบกล้อง ใช้ไฟล์หรือภาพทดลองก่อนได้",NotReadableError:"เปิดกล้องไม่ได้ กรุณาตรวจสายและปิดโปรแกรมอื่นที่ใช้กล้อง"})[error.name] || error.message,true);
@@ -102,7 +104,7 @@ function chooseImage(blob,source) {
   device.preview=URL.createObjectURL(blob); d("#device-preview").src=device.preview;
   d("#device-preview").hidden=false; d("#camera-empty").hidden=true;
   d("#source-label").textContent=source==="sample" ? "ภาพทดลองจากชุดข้อมูลที่เลือก" : "ไฟล์จากเครื่อง";
-  buttons(); message("เลือกภาพแล้ว กดถ่าย / ตรวจโรคเพื่อวิเคราะห์");
+  buttons(); message("ภาพนิ่งพร้อมแล้ว ตรวจภาพก่อนกดวิเคราะห์โรค");
 }
 async function cameraFrame() {
   const video=d("#device-video");
@@ -117,38 +119,39 @@ function renderResult(row) {
   const result=row.prediction,best=result.candidates[0];
   d("#device-result-empty").hidden=true; d("#device-result").hidden=false;
   d("#analyzed-frame").src=row.image_url;
-  d("#result-disease").textContent=result.uncertain ? "ยังระบุไม่ได้" : best.disease_th;
-  d("#result-crop").textContent=result.uncertain ? "ลองถ่ายใหม่ให้เห็นใบชัดเจน" : best.crop_th;
+  d("#result-disease").textContent=result.uncertain ? "ยังไม่สามารถระบุโรคได้อย่างมั่นใจ" : best.disease_th;
+  d("#result-crop").textContent=result.uncertain ? "ลองถ่ายใหม่ให้เห็นใบชัดเจน" : DeviceUI.english(best.disease);
   d("#result-time").textContent=dateText(row.captured_at);
   d("#uncertainty").textContent=result.uncertain ? "คะแนนยังไม่ชัดเจน · ผลด้านล่างเป็นเพียงกลุ่มที่ใกล้เคียง" : "ผลคาดการณ์เบื้องต้น · ตรวจอาการจริงประกอบ";
   d("#device-candidates").replaceChildren();
-  for(const item of result.candidates) {
+  for(const item of result.candidates.slice(0,3)) {
     const box=document.createElement("div");box.className="rank-row";
     const line=document.createElement("div"),label=document.createElement("span"),score=document.createElement("span"),bar=document.createElement("progress");
-    label.textContent=`${item.crop_th} · ${item.disease_th}`;score.textContent=percent(item.score);bar.max=1;bar.value=item.score;
+    label.textContent=item.disease_th;score.textContent=percent(item.score);bar.max=1;bar.value=item.score;
     line.append(label,score);box.append(line,bar);d("#device-candidates").append(box);
   }
   d("#result-location").textContent=`${locationName(row.location_source)} · ${row.latitude.toFixed(5)}, ${row.longitude.toFixed(5)}`;
   d("#result-state").textContent=row.saved_at ? "บันทึกแล้ว" : "ตรวจแล้ว · ยังไม่บันทึก";
   d("#observer-severity").value=row.severity;d("#scan-note").value=row.note;
   PlantCare.summary(d("#result-care"),row.advice);
+  DeviceUI.result(row);
   buttons();
 }
 async function analyze() {
-  if(device.busy || !device.ready)return;
+  if(device.busy || device.capturing || !device.ready || !device.blob || device.stream)return;
   let location;try{location=locationSnapshot();}catch(error){message(error.message,true);return;}
   const generation=++device.requestGeneration, controller=new AbortController();device.controller=controller;
   device.busy=true;buttons();message("กำลังตรวจด้วย AI บนเครื่อง…");
   const timeout=setTimeout(()=>controller.abort(),30000);
   try {
-    const source=device.stream ? "camera" : device.source, blob=device.stream ? await cameraFrame() : device.blob;
+    const source=device.source, blob=device.blob;
     if(generation!==device.requestGeneration)return;
     if(!blob)throw new Error("กรุณาเลือกภาพก่อน");
     const form=new FormData();form.append("image",blob,"scan-image");form.append("source",source);
     Object.entries(location).forEach(([key,value])=>form.append(key,value));
     const row=await api("/api/device/analyze",{method:"POST",body:form,signal:controller.signal});
     if(generation!==device.requestGeneration)return;
-    device.draft=row;renderResult(row);message("ตรวจเสร็จแล้ว กดบันทึกจุดตรวจเพื่อเก็บลงสมุดและแผนที่");
+    device.draft=row;renderResult(row);showTab("result",true);message("วิเคราะห์เสร็จแล้ว ตรวจผลก่อนบันทึกหรือพิมพ์");
   } catch(error) { if(generation===device.requestGeneration)message(error.name==="AbortError" ? "การตรวจใช้เวลานานเกินไป กรุณาลองใหม่" : error.message,true); }
   finally {clearTimeout(timeout);if(generation===device.requestGeneration){device.busy=false;device.controller=null;buttons();}}
 }
@@ -198,55 +201,116 @@ function popup(row) {
 }
 function initializeMap() {
   if(device.map)return;
-  device.map=L.map("field-map",{zoomControl:true}).setView([16.053,103.652],17);
+  device.map=L.map("field-map",{zoomControl:true,zoomAnimation:false,fadeAnimation:false,markerZoomAnimation:false}).setView([16.053,103.652],17);
   L.control.scale({imperial:false}).addTo(device.map);device.markers=L.featureGroup().addTo(device.map);updateLocation();
+  device.map.on("moveend",mapCoverageState);
 }
-function mapState(state) {
+function mapState(state, detailText="") {
+  const name=device.mapInfo?.name || "ไฟล์แผนที่ในเครื่อง";
   const descriptions={
-    loading:"กำลังโหลดแผนที่ถนน… ต้องใช้อินเทอร์เน็ต",
-    ready:"แผนที่ถนนจาก OpenStreetMap · ใช้อินเทอร์เน็ต",
-    partial:"โหลดแผนที่ถนนได้บางส่วน · ตรวจอินเทอร์เน็ตแล้วลองโหลดใหม่",
-    error:"โหลดแผนที่ถนนไม่ได้ · ตรวจอินเทอร์เน็ตแล้วกดลองโหลดใหม่",
-    offline:"ปิดแผนที่ถนนอยู่ · ตารางแสดงเฉพาะพิกัดจุดตรวจ"
+    loading:"กำลังอ่านแผนที่จากเครื่อง… ไม่ใช้อินเทอร์เน็ต",
+    ready:`แผนที่ออฟไลน์พร้อมใช้งาน · ${name}`,
+    partial:"แผนที่ในเครื่องบางช่องอ่านไม่ได้ · จุดตรวจยังแสดงได้",
+    error:"อ่านไฟล์แผนที่ไม่ได้ · จุดตรวจและประวัติยังใช้ได้",
+    missing:"ยังไม่มีไฟล์แผนที่ออฟไลน์ · แสดงเฉพาะพิกัดจุดตรวจ",
+    grid:"ปิดพื้นแผนที่อยู่ · แสดงเฉพาะพิกัดจุดตรวจ",
+    outside:"บริเวณนี้อยู่นอกพื้นที่แผนที่ที่เก็บไว้ · จุดตรวจยังแสดงได้"
   };
-  d("#map-mode").textContent=descriptions[state];
+  d("#map-mode").textContent=descriptions[state] || descriptions.error;
   d("#map-mode").dataset.state=state;
-  // Keep older open pages usable until the server has reloaded the template.
   const notice=d("#map-notice"),detail=d("#map-notice-text"),retry=d("#retry-map");
-  if(notice)notice.hidden=state==="ready" || state==="loading";
-  if(detail)detail.textContent=state==="offline"
-    ? "ต้องเปิดแผนที่ถนนเพื่อดูถนนและสถานที่ ใช้อินเทอร์เน็ต แต่ภาพใบพืชยังเก็บในเครื่อง"
-    : "จุดตรวจยังแสดงได้ พื้นถนนต้องเชื่อมต่อ OpenStreetMap ผ่านอินเทอร์เน็ต";
-  if(retry)retry.textContent=state==="offline" ? "เปิดแผนที่ถนน" : "ลองโหลดใหม่";
-  d("#online-map").setAttribute("aria-pressed",String(!!device.tiles));
-  d("#online-map").textContent=device.tiles ? "ปิดแผนที่ถนน" : "เปิดแผนที่ถนน (อินเทอร์เน็ต)";
+  notice.hidden=state==="ready" || state==="loading" || state==="grid";
+  detail.textContent=detailText || (state==="outside"
+    ? "กดดูพื้นที่แผนที่เพื่อกลับเข้าขอบเขต หรือใส่ไฟล์แผนที่ที่ครอบคลุมพื้นที่สำรวจนี้"
+    : state==="missing" ? "ติดตั้งไฟล์แผนที่ในเครื่องตาม OFFLINE_MAP_GUIDE_TH.md ไม่ต้องเชื่อมอินเทอร์เน็ตขณะสำรวจ"
+    : "ตรวจไฟล์แผนที่ในเครื่องแล้วกดตรวจไฟล์อีกครั้ง ระบบจะไม่เรียกเว็บไซต์แผนที่ภายนอก");
+  retry.textContent=state==="outside" ? "ดูพื้นที่แผนที่" : "ตรวจไฟล์อีกครั้ง";
+  d("#offline-map").setAttribute("aria-pressed",String(device.mapEnabled));
+  d("#offline-map").textContent=device.mapEnabled ? "ปิดพื้นแผนที่" : "เปิดแผนที่ออฟไลน์";
+  d("#show-map-coverage").disabled=!device.mapInfo?.ready;
 }
-function setRoadMapEnabled(enabled) {
+function mapCoverageState() {
+  if(!device.mapEnabled || !device.mapInfo?.ready || !device.tiles)return;
+  const [west,south,east,north]=device.mapInfo.bounds;
+  const center=device.map.getCenter();
+  const expanded=device.map.getZoom()>device.mapInfo.maxzoom;
+  d("#map-pack").textContent=(device.mapCaption || "")+(expanded ? " · กำลังขยายภาพจากระดับซูมข้อมูล" : "");
+  const outside=center.lng<west || center.lng>east || center.lat<south || center.lat>north;
+  mapState(outside ? "outside" : device.mapTileState || "loading");
+}
+function showMapCoverage() {
+  if(!device.mapInfo?.ready)return;
+  const [west,south,east,north]=device.mapInfo.bounds;
+  device.map.stop();device.map.invalidateSize({animate:false,pan:false});
+  device.map.fitBounds([[south,west],[north,east]],{padding:[12,12],maxZoom:device.mapInfo.maxzoom,animate:false});
+}
+function mapAttribution(info) {
+  const span=document.createElement("span");
+  span.textContent=info.attribution?.text || "แผนที่ในเครื่อง";
+  if(info.attribution?.url){
+    const url=new URL(info.attribution.url,location.origin);
+    if(["https:","http:"].includes(url.protocol)){
+      const link=document.createElement("a");link.href=url.href;link.target="_blank";link.rel="noopener";
+      link.textContent=span.textContent;span.replaceChildren(link);
+    }
+  }
+  return span.outerHTML;
+}
+async function setRoadMapEnabled(enabled) {
+  const generation=++device.mapGeneration;
+  device.mapEnabled=enabled;device.mapController?.abort();
   clearTimeout(device.mapLoadTimer);
-  if(device.tiles){device.tiles.off();device.tiles.remove();device.tiles=null;}
-  if(!enabled){mapState("offline");return;}
-  initializeMap();
-  const layer=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{
-    maxZoom:19,keepBuffer:1,updateWhenIdle:true,
-    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
-    referrerPolicy:"strict-origin-when-cross-origin"
-  });
-  device.tiles=layer;
-  let loaded=0,failed=0;
-  layer.on("loading",()=>{
-    if(device.tiles!==layer)return;
-    loaded=0;failed=0;mapState("loading");clearTimeout(device.mapLoadTimer);
-    device.mapLoadTimer=setTimeout(()=>{if(device.tiles===layer)mapState(loaded ? "partial" : "error");},12000);
-  });
-  layer.on("tileload",()=>{if(device.tiles===layer)loaded++;});
-  layer.on("tileerror",()=>{if(device.tiles===layer)failed++;});
-  layer.on("load",()=>{
-    if(device.tiles!==layer)return;
-    clearTimeout(device.mapLoadTimer);
-    mapState(failed ? (loaded ? "partial" : "error") : "ready");
-  });
-  mapState("loading");layer.addTo(device.map);
+  if(device.tiles){const previous=device.tiles;device.tiles=null;previous.remove();previous.off();}
+  if(device.coverageLayer){device.coverageLayer.remove();device.coverageLayer=null;}
+  if(!enabled){mapState("grid");return;}
+  initializeMap();mapState("loading");
+  const controller=new AbortController();device.mapController=controller;
+  const timeout=setTimeout(()=>controller.abort(),10000);
+  try {
+    const info=await api("/api/device/map/status",{signal:controller.signal});
+    if(generation!==device.mapGeneration)return;
+    const firstPackage=!device.mapInfo?.ready;device.mapInfo=info;
+    if(!info.ready){
+      d("#map-pack").textContent="ยังไม่มีพื้นแผนที่ที่พร้อมใช้งานในเครื่อง";
+      mapState(info.code==="missing" ? "missing" : "error",info.error || "");return;
+    }
+    if(!Array.isArray(info.bounds) || info.bounds.length!==4 || !info.bounds.every(Number.isFinite))throw new Error("ขอบเขตไฟล์แผนที่ไม่ถูกต้อง");
+    const [west,south,east,north]=info.bounds;
+    const bounds=L.latLngBounds([[south,west],[north,east]]);
+    device.map.setMinZoom(Math.max(1,info.minzoom-2));
+    device.map.setMaxZoom(Math.min(20,info.maxzoom+2));
+    if(firstPackage && device.map.getZoom()>info.maxzoom)device.map.setZoom(info.maxzoom);
+    device.mapCaption=`${info.name} · ไฟล์ในเครื่อง · ซูมข้อมูล ${info.minzoom}–${info.maxzoom} · ${(info.size_bytes/1000000).toFixed(1)} MB`;
+    d("#map-pack").textContent=device.mapCaption;
+    device.coverageLayer=L.rectangle(bounds,{color:"#567b56",weight:1,dashArray:"6 5",fill:false,interactive:false}).addTo(device.map);
+    const version=encodeURIComponent(info.version || info.revision || "local");
+    const layer=L.tileLayer(`/api/device/map/tiles/{z}/{x}/{y}.png?v=${version}`,{
+      minNativeZoom:info.minzoom,maxNativeZoom:info.maxzoom,maxZoom:Math.min(20,info.maxzoom+2),
+      bounds,noWrap:true,tileSize:256,keepBuffer:1,updateWhenIdle:true,
+      attribution:mapAttribution(info)
+    });
+    device.tiles=layer;device.mapTileState="loading";
+    let loaded=0,failed=0;
+    layer.on("loading",()=>{
+      if(device.tiles!==layer)return;
+      loaded=0;failed=0;device.mapTileState="loading";mapCoverageState();clearTimeout(device.mapLoadTimer);
+      device.mapLoadTimer=setTimeout(()=>{
+        if(device.tiles===layer){device.mapTileState=loaded ? "partial" : "error";mapCoverageState();}
+      },10000);
+    });
+    layer.on("tileload",()=>{if(device.tiles===layer)loaded++;});
+    layer.on("tileerror",()=>{if(device.tiles===layer)failed++;});
+    layer.on("load",()=>{
+      if(device.tiles!==layer)return;
+      clearTimeout(device.mapLoadTimer);device.mapTileState=failed ? (loaded ? "partial" : "error") : "ready";
+      mapCoverageState();
+    });
+    layer.addTo(device.map);mapCoverageState();
+  }catch(error){
+    if(generation===device.mapGeneration){device.mapInfo=null;mapState("error",error.name==="AbortError" ? "อ่านสถานะแผนที่ไม่สำเร็จ กรุณาตรวจว่าแอปยังเปิดอยู่แล้วลองอีกครั้ง" : error.message);}
+  }finally{clearTimeout(timeout);if(generation===device.mapGeneration)device.mapController=null;}
 }
+
 function renderMap() {
   if(!device.map)return;
   device.markers.clearLayers();d("#map-list").replaceChildren();
@@ -256,28 +320,33 @@ function renderMap() {
     const marker=L.circleMarker([row.latitude,row.longitude],{radius:9,color:"white",weight:2,fillColor:markerColor(row),fillOpacity:.95}).addTo(device.markers).bindPopup(popup(row));
     const button=document.createElement("button");button.className="map-record";button.textContent=recordTitle(row);
     const detail=document.createElement("small");detail.textContent=`${locationName(row.location_source)} · ${dateText(row.captured_at)}`;button.append(detail);
-    button.addEventListener("click",()=>{device.map.setView(marker.getLatLng(),17);marker.openPopup();});d("#map-list").append(button);
+    button.addEventListener("click",()=>{device.map.setView(marker.getLatLng(),17,{animate:false});marker.openPopup();});d("#map-list").append(button);
   }
 }
-function fitPoints() {if(device.markers?.getLayers().length)device.map.fitBounds(device.markers.getBounds(),{padding:[30,30],maxZoom:18});else{try{const point=locationSnapshot();device.map.setView([point.latitude,point.longitude],17);}catch{}}}
-function showTab(tab) {
-  if(tab!=="capture"){cancelAnalysis();stopCamera();}
+function fitPoints() {if(device.markers?.getLayers().length)device.map.fitBounds(device.markers.getBounds(),{padding:[30,30],maxZoom:18,animate:false});else{try{const point=locationSnapshot();device.map.setView([point.latitude,point.longitude],17,{animate:false});}catch{}}}
+function showTab(tab, keepAnalysis=false) {
+  if(!["home","capture","result","map","history","care","settings"].includes(tab))tab="home";
+  if(tab==="result" && !device.draft)tab="capture";
+  if(tab!=="capture"){if(!keepAnalysis)cancelAnalysis();stopCamera();}
   device.tab=tab;
-  for(const name of ["capture","map","history","care","settings"])d(`#screen-${name}`).hidden=name!==tab;
-  document.querySelectorAll("[data-tab]").forEach(button=>{button.classList.toggle("active",button.dataset.tab===tab);button.setAttribute("aria-pressed",String(button.dataset.tab===tab));});
+  for(const name of ["home","capture","result","map","history","care","settings"])d(`#screen-${name}`).hidden=name!==tab;
+  document.querySelectorAll("[data-tab]").forEach(button=>{button.classList.toggle("active",button.dataset.tab===(tab==="result" ? "capture" : tab));button.setAttribute("aria-pressed",String(button.dataset.tab===(tab==="result" ? "capture" : tab)));});
   if(tab==="map"){
     const firstVisit=!device.map;
     initializeMap();device.map.invalidateSize();renderMap();fitPoints();
-    // Request roads only when the user opens the map, and respect a manual switch off.
+    // Read local map files on first visit; preserve a manual switch to the coordinate grid.
     if(firstVisit)setRoadMapEnabled(true);
   }
   if(tab==="history" || tab==="map")loadHistory().catch(error=>message(error.message,true));
   if(tab==="capture")updateGuide();
   if(tab==="care")PlantCare.library(d("#care-library"));
+  DeviceUI.view(tab);
+  d("#workspace").scrollTop=0;
 }
 function renderHistory() {
   d("#history-count").textContent=`ทั้งหมด ${device.total} จุด · แสดง ${device.records.length} รายการล่าสุด`;
   d("#saved-count").textContent=`${device.total} จุดบันทึก`;
+  DeviceUI.historySummary(device.total);
   d("#history-list").replaceChildren();
   if(!device.records.length){const p=document.createElement("p");p.className="empty";p.textContent="ยังไม่มีจุดตรวจ ลองเลือกภาพ ตรวจโรค แล้วกดบันทึกจุดตรวจ";d("#history-list").append(p);return;}
   for(const row of device.records){
@@ -286,7 +355,7 @@ function renderHistory() {
     const body=document.createElement("div"),title=document.createElement("strong"),details=document.createElement("small"),note=document.createElement("p"),tag=document.createElement("span"),button=document.createElement("button");
     title.textContent=recordTitle(row);details.textContent=`${dateText(row.captured_at)} · ${row.latitude.toFixed(5)}, ${row.longitude.toFixed(5)}`;
     note.textContent=row.note;tag.className="simulation-tag";tag.textContent=locationName(row.location_source);body.append(title,details,tag,note);
-    button.textContent="ดูบนแผนที่ ↗";button.addEventListener("click",()=>{showTab("map");device.map.setView([row.latitude,row.longitude],18);L.popup().setLatLng([row.latitude,row.longitude]).setContent(popup(row)).openOn(device.map);});
+    button.textContent="ดูบนแผนที่ ↗";button.addEventListener("click",()=>{showTab("map");device.map.setView([row.latitude,row.longitude],18,{animate:false});L.popup().setLatLng([row.latitude,row.longitude]).setContent(popup(row)).openOn(device.map);});
     const actions=document.createElement("div");actions.className="scan-actions";
     const preview=document.createElement("button");preview.textContent="ดูใบผลตรวจ";preview.addEventListener("click",()=>previewReceipt(row.id));
     const print=document.createElement("button");print.dataset.printScan=row.id;print.textContent=device.printedIds.has(row.id) ? "พิมพ์ซ้ำ" : "พิมพ์ผล";
@@ -294,7 +363,9 @@ function renderHistory() {
     const care=document.createElement("button");care.textContent="ดูคำแนะนำ";care.dataset.careScan=row.id;care.addEventListener("click",()=>openCare(row.id));
     const remove=document.createElement('button');remove.type='button';remove.className='delete-scan';remove.textContent='ลบรายการนี้';remove.dataset.deleteScan=row.id;
     remove.disabled=device.deleting || device.printing || device.saving || device.busy;remove.addEventListener('click',()=>requestDelete(row));
-    actions.append(button,care,preview,print,remove);
+    const detailsButton=document.createElement('button');detailsButton.textContent='เปิดผลตรวจ';detailsButton.className='history-open-result';detailsButton.dataset.viewScan=row.id;
+    detailsButton.addEventListener('click',async()=>{try{const saved=await api(`/api/device/scans/${encodeURIComponent(row.id)}`);device.draft=saved;renderResult(saved);showTab('result');}catch(error){message(error.message,true);}});
+    actions.append(detailsButton,button,care,preview,print,remove);
     card.append(img,body,actions);d("#history-list").append(card);
   }
 }
@@ -334,8 +405,8 @@ async function confirmDelete() {
 }
 async function status() {
   clearTimeout(device.pollTimer);
-  try {const data=await api("/api/status");device.ready=data.ready;d("#ai-status").textContent=data.ready ? "● AI พร้อมตรวจ" : "● ยังไม่มีโมเดล AI";}
-  catch{device.ready=false;d("#ai-status").textContent="● เชื่อมต่อโปรแกรมไม่ได้";}
+  try {const data=await api("/api/status");device.ready=!!data.ready;d("#ai-status").textContent=data.ready ? "AI พร้อมใช้งาน" : "โมเดลยังไม่พร้อม";d("#ai-status").classList.toggle("ready",device.ready);}
+  catch{device.ready=false;d("#ai-status").textContent="เชื่อมต่อโปรแกรมไม่ได้";d("#ai-status").classList.remove("ready");}
   try{device.printer=await api("/api/device/printer");d("#printer-status").textContent=device.printer.message;}
   catch{device.printer={configured:false};d("#printer-status").textContent="ตรวจสถานะเครื่องพิมพ์ไม่ได้";}
   buttons();device.pollTimer=setTimeout(status,15000);
@@ -357,16 +428,37 @@ d('#cancel-delete').addEventListener('click',()=>{if(!device.deleting)d('#delete
 d('#confirm-delete').addEventListener('click',confirmDelete);
 d('#delete-dialog').addEventListener('cancel',event=>{if(device.deleting)event.preventDefault();});
 d('#delete-dialog').addEventListener('close',()=>{device.pendingDelete=null;buttons();});
-d("#online-map").addEventListener("click",()=>setRoadMapEnabled(!device.tiles));
-d("#retry-map")?.addEventListener("click",()=>setRoadMapEnabled(true));
+d("#offline-map").addEventListener("click",()=>setRoadMapEnabled(!device.mapEnabled));
+d("#show-map-coverage").addEventListener("click",showMapCoverage);
+d("#retry-map").addEventListener("click",()=>d("#map-mode").dataset.state==="outside" ? showMapCoverage() : setRoadMapEnabled(true));
 for(const id of ["#latitude","#longitude","#location-source"])d(id).addEventListener("change",updateLocation);
 d("#move-location").addEventListener("click",()=>{try{const point=locationSnapshot();d("#location-source").value="simulated";d("#latitude").value=Math.min(89.99,point.latitude+.0003).toFixed(6);d("#longitude").value=Math.min(179.99,point.longitude+.0002).toFixed(6);updateLocation();message("เปลี่ยนพิกัดสำหรับภาพถัดไปแล้ว");}catch(error){message(error.message,true);}});
 d("#toggle-led").addEventListener("click",()=>{device.led=!device.led;d("#led-status").textContent=`ไฟจำลอง: ${device.led ? "เปิด" : "ปิด"}`;d("#lamp").hidden=!device.led;d("#toggle-led").textContent=device.led ? "ปิด LED จำลอง" : "เปิด LED จำลอง";d("#toggle-led").setAttribute("aria-pressed",String(device.led));});
-d("#battery").addEventListener("input",()=>{d("#battery-status").textContent=`แบตจำลอง ${d("#battery").value}%`;});
+
 d("#fullscreen").addEventListener("click",async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{message("กด F11 เพื่อใช้หน้าจอเต็มได้ครับ");}});
 document.addEventListener("fullscreenchange",()=>{document.body.classList.toggle("kiosk",!!document.fullscreenElement);device.map?.invalidateSize();});
 document.addEventListener("visibilitychange",()=>{if(document.hidden){cancelAnalysis();stopCamera();}});
 window.addEventListener("pagehide",()=>{cancelAnalysis();stopCamera();releasePreview();clearTimeout(device.pollTimer);clearTimeout(device.mapLoadTimer);});
 d("#care-search").addEventListener("input",()=>PlantCare.library(d("#care-library")));
+
+async function capturePhoto() {
+  if(device.capturing || device.busy || !device.stream || device.opening)return;
+  const generation=device.cameraGeneration;device.capturing=true;buttons();
+  try {const frame=await cameraFrame();if(generation!==device.cameraGeneration)return;chooseImage(frame,'camera');d('#source-label').textContent='ภาพนิ่งจากกล้อง · พร้อมวิเคราะห์';}
+  catch(error){message(error.message,true);}finally{device.capturing=false;buttons();}
+}
+function newScan() {
+  if(device.busy || device.saving || device.printing || device.deleting)return;
+  cancelAnalysis();stopCamera();releasePreview();device.blob=null;device.source='upload';clearResult();
+  d('#device-file').value='';d('#device-preview').hidden=true;d('#camera-empty').hidden=false;d('#capture-guide').hidden=true;
+  d('#source-label').textContent='รอภาพใบข้าว';showTab('capture');buttons();
+}
+d('#capture-photo').addEventListener('click',capturePhoto);
+d('#retake-photo').addEventListener('click',openCamera);
+d('#new-scan').addEventListener('click',newScan);
+d('#result-detail').addEventListener('click',()=>PlantCare.open(device.draft?.advice));
+d('#edit-observations').addEventListener('click',()=>d('#observations-dialog').showModal());
+d('#refresh-device-status').addEventListener('click',status);
+
 updateLocation();status();loadHistory().catch(error=>message(error.message,true));
-if(location.hash==="#care")showTab("care");
+showTab(location.hash.slice(1) || "home");

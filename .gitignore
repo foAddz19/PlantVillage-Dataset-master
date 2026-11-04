@@ -21,3 +21,11 @@ datasets/
 models/paddy/
 config/printer.json
 dist/
+
+# Generated offline basemaps and their raw geographic extracts.
+maps/*.mbtiles
+maps/*.osm.json.gz
+
+maps/*.geojsonseq.gz
+
+map-backups/

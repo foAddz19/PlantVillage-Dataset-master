@@ -19,7 +19,7 @@ from leaflab.care import advice_for_prediction, library as care_library, guide a
 
 
 def create_app(catalog=None, service=None, data_dir=None, *, model_backend=None,
-               model_dir=None, dataset_dir=None, inference_only=False, printer_service=None):
+               model_dir=None, dataset_dir=None, inference_only=False, printer_service=None, maps_dir=None):
     app = Flask(__name__)
     app.config.update(MAX_CONTENT_LENGTH=9 * 1024 * 1024,
                       TRUSTED_HOSTS=["127.0.0.1", "localhost", "[::1]"])
@@ -52,6 +52,8 @@ def create_app(catalog=None, service=None, data_dir=None, *, model_backend=None,
     printer_service = printer_service or PrintService(data_dir or ROOT / "data")
     app.extensions["printer_service"] = printer_service
     app.register_blueprint(device_routes(service, token, data_dir or ROOT / "data", printer_service))
+    from leaflab.offline_maps import offline_map_routes
+    app.register_blueprint(offline_map_routes(maps_dir or os.environ.get("LEAFLAB_MAPS_DIR") or ROOT / "maps"))
 
     @app.errorhandler(PrinterError)
     def printer_error(error):
@@ -81,11 +83,7 @@ def create_app(catalog=None, service=None, data_dir=None, *, model_backend=None,
             "default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; "
             "script-src 'self'; connect-src 'self'; media-src 'self' blob:; "
             "frame-ancestors 'none'; form-action 'self'; base-uri 'self'")
-        if request.path == "/device":
-            response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-            response.headers["Content-Security-Policy"] = response.headers["Content-Security-Policy"].replace(
-                "img-src 'self' blob: data:", "img-src 'self' blob: data: https://tile.openstreetmap.org")
-        if request.path.startswith("/api/") and request.path != "/api/image":
+        if request.path.startswith("/api/") and request.path != "/api/image" and request.endpoint != "offline_maps.map_tile":
             response.headers["Cache-Control"] = "no-store"
         return response
 
@@ -109,6 +107,10 @@ def create_app(catalog=None, service=None, data_dir=None, *, model_backend=None,
 
     @app.get("/")
     def index():
+        return render_template("device.html", token=token)
+
+    @app.get("/lab")
+    def laboratory():
         return render_template("index.html", token=token, model_backend=backend)
 
     @app.get("/api/health")
@@ -233,6 +235,7 @@ def main():
     parser.add_argument("--model", choices=("plantvillage", "paddy"), default=os.environ.get("LEAFLAB_MODEL", "plantvillage"))
     parser.add_argument("--model-dir", type=Path)
     parser.add_argument("--dataset-dir", type=Path)
+    parser.add_argument("--maps-dir", type=Path, help="Directory containing current.mbtiles for offline maps")
     parser.add_argument("--inference-only", action="store_true")
     args = parser.parse_args()
     base_url = f"http://127.0.0.1:{args.port}"
@@ -251,7 +254,7 @@ def main():
         except (OSError, ValueError):
             pass
     app = create_app(model_backend=args.model, model_dir=args.model_dir,
-                     dataset_dir=args.dataset_dir, inference_only=args.inference_only)
+                     dataset_dir=args.dataset_dir, inference_only=args.inference_only, maps_dir=args.maps_dir)
     if args.open_browser:
         threading.Timer(1.5, lambda: webbrowser.open(url)).start()
     print(f"Leaf Lab is ready at {url}\nPress Ctrl+C to stop.", flush=True)

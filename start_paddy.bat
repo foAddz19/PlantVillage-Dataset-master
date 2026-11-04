@@ -6,7 +6,7 @@ if not exist ".venv\Scripts\python.exe" (
     python -m venv .venv
     if errorlevel 1 goto failed
 )
-".venv\Scripts\python.exe" -c "import flask, PIL, numpy, waitress, ai_edge_litert" >nul 2>&1
+".venv\Scripts\python.exe" -c "import flask, PIL, numpy, waitress, ai_edge_litert, win32print" >nul 2>&1
 if errorlevel 1 (
     ".venv\Scripts\python.exe" -m pip install -r requirements-pi.txt
     if errorlevel 1 goto failed

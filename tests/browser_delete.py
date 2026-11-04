@@ -33,10 +33,13 @@ def main():
                     base=f'http://127.0.0.1:{server.server_port}'
                     page.goto(base+'/device',wait_until='networkidle')
                     for index in range(2):
+                        page.locator('[data-tab="capture"]').click()
                         page.locator('#device-file').set_input_files(str(image))
                         page.locator('#analyze-scan').click()
                         expect(page.locator('#result-state')).to_have_text('ตรวจแล้ว · ยังไม่บันทึก')
+                        page.locator('#edit-observations').click()
                         page.locator('#scan-note').fill(f'ข้อมูลทดสอบการลบเฉพาะรายการ {index+1} · ฐานข้อมูลชั่วคราว')
+                        page.locator('#close-observations').click()
                         page.locator('#save-scan').click()
                         expect(page.locator('#save-scan')).to_have_text('✓ บันทึกแล้ว')
                     records=page.request.get(base+'/api/device/scans').json()['items']

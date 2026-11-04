@@ -89,11 +89,32 @@ class DeviceTests(unittest.TestCase):
         self.assertIn("'=1+1", csv.text)
         self.assertTrue(csv.data.startswith(b"\xef\xbb\xbf"))
 
-    def test_map_external_images_are_scoped_to_device_page(self):
-        page = self.client.get("/device")
-        self.assertIn("https://tile.openstreetmap.org", page.headers["Content-Security-Policy"])
-        self.assertEqual(page.headers["Referrer-Policy"], "strict-origin-when-cross-origin")
-        self.assertNotIn("https://tile.openstreetmap.org", self.client.get("/").headers["Content-Security-Policy"])
+    def test_offline_map_cache_headers_survive_application_response_policy(self):
+        from tests.test_offline_maps import make_map
+        maps = self.root / "maps"
+        maps.mkdir()
+        make_map(maps / "current.mbtiles")
+        app = create_app(self.catalog, self.service, data_dir=self.root / "data", maps_dir=maps)
+        client = app.test_client()
+        status = client.get("/api/device/map/status")
+        self.assertTrue(status.json["ready"])
+        self.assertEqual(status.headers["Cache-Control"], "no-store")
+        image = client.get("/api/device/map/tiles/2/1/0.png")
+        self.assertEqual(image.status_code, 200)
+        self.assertIn("must-revalidate", image.headers["Cache-Control"])
+        cached = client.get("/api/device/map/tiles/2/1/0.png", headers={"If-None-Match": image.headers["ETag"]})
+        self.assertEqual(cached.status_code, 304)
+        self.assertEqual(cached.data, b"")
+        self.assertEqual(client.get("/api/device/scans").headers["Cache-Control"], "no-store")
+
+    def test_offline_map_never_allows_external_tile_images(self):
+        for path in ("/device", "/"):
+            page = self.client.get(path)
+            self.assertNotIn("https://", page.headers["Content-Security-Policy"])
+            self.assertIn("img-src 'self' blob: data:", page.headers["Content-Security-Policy"])
+            self.assertEqual(page.headers["Referrer-Policy"], "same-origin")
+        self.assertIn('id="offline-map"', self.client.get("/device").text)
+        self.assertNotIn('id="online-map"', self.client.get("/device").text)
 
 
 if __name__ == "__main__":

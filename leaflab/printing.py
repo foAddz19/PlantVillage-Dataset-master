@@ -1,4 +1,4 @@
-"""Explicit USB printing, bounded writes, and persistent request deduplication."""
+"""Explicit USB/Windows printing and persistent request deduplication."""
 from __future__ import annotations
 
 import hashlib
@@ -31,7 +31,7 @@ def usb_id(value):
 
 def read_config(path):
     config = dict(enabled=False, width_dots=384, timeout_ms=5000, fragment_height=64, pause_ms=100, feed_lines=4,
-                  serial_number=None, interface=None, out_endpoint=None)
+                  serial_number=None, interface=None, out_endpoint=None, transport='usb', printer_name=None)
     if not Path(path).exists(): return config
     try:
         supplied = json.loads(Path(path).read_text(encoding='utf-8'))
@@ -45,9 +45,16 @@ def read_config(path):
             if config[name] is not None and (type(config[name]) is not int or not 0 <= config[name] <= maximum):
                 raise ValueError('ค่าตั้ง USB ไม่ถูกต้อง: '+name)
         if config['serial_number'] is not None and not isinstance(config['serial_number'],str): raise ValueError('serial_number ต้องเป็นข้อความ')
+        if config['transport'] not in ('usb', 'windows_raw'):
+            raise ValueError('transport ต้องเป็น usb หรือ windows_raw')
         if config['enabled']:
-            config['vendor_id'] = usb_id(config.get('vendor_id'))
-            config['product_id'] = usb_id(config.get('product_id'))
+            if config['transport'] == 'usb':
+                config['vendor_id'] = usb_id(config.get('vendor_id'))
+                config['product_id'] = usb_id(config.get('product_id'))
+            else:
+                name = config['printer_name']
+                if not isinstance(name, str) or not name.strip() or len(name) > 256 or any(ord(c) < 32 for c in name):
+                    raise ValueError('ต้องระบุ printer_name ของคิว Windows ที่ติดตั้งไว้')
         return config
     except (ValueError, OSError, TypeError) as exc:
         raise PrinterError('ตั้งค่าเครื่องพิมพ์ไม่ถูกต้อง: '+str(exc)) from exc
@@ -115,11 +122,18 @@ def send_usb(commands, config):
         usb.util.dispose_resources(dev)
 
 
+def send_print(commands, config):
+    if config['transport'] == 'windows_raw':
+        from .windows_printer import send_windows_raw
+        return send_windows_raw(commands, config)
+    return send_usb(commands, config)
+
+
 class PrintService:
     def __init__(self, directory, config_path=None, sender=None):
         self.directory = Path(directory)
         self.config_path = Path(config_path or os.environ.get('LEAFLAB_PRINTER_CONFIG') or ROOT/'config'/'printer.json')
-        self.sender = sender or send_usb
+        self.sender = sender or send_print
         self.lock = threading.Lock()
 
     def status(self):
@@ -127,7 +141,7 @@ class PrintService:
             config = read_config(self.config_path)
             configured = config['enabled']
             return dict(configured=configured, busy=self.lock.locked(), connection_verified=False,
-                        message='ตั้งค่าแล้ว · ตรวจ USB เมื่อกดพิมพ์' if configured else 'ยังไม่ได้ตั้งค่าเครื่องพิมพ์ USB')
+                        message=('ตั้งค่าแล้ว · ตรวจคิว Windows เมื่อกดพิมพ์' if config['transport'] == 'windows_raw' else 'ตั้งค่าแล้ว · ตรวจ USB เมื่อกดพิมพ์') if configured else 'ยังไม่ได้ตั้งค่าเครื่องพิมพ์')
         except PrinterError as exc:
             return dict(configured=False, busy=self.lock.locked(), connection_verified=False, message=str(exc))
 
@@ -153,9 +167,19 @@ class PrintService:
                 import fcntl
                 try: fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 except BlockingIOError as exc: raise PrinterError('เครื่องพิมพ์กำลังทำงาน กรุณารอสักครู่',429) from exc
+            elif os.name == 'nt':
+                import msvcrt
+                handle.seek(0, os.SEEK_END)
+                if handle.tell() == 0:
+                    handle.write(b'\0'); handle.flush()
+                handle.seek(0)
+                try: msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                except OSError as exc: raise PrinterError('เครื่องพิมพ์กำลังทำงาน กรุณารอสักครู่',429) from exc
             try: yield
             finally:
                 if os.name == 'posix': fcntl.flock(handle, fcntl.LOCK_UN)
+                elif os.name == 'nt':
+                    handle.seek(0); msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
 
     def print_scan(self, row, request_id):
         from .receipt import escpos_commands
@@ -172,7 +196,7 @@ class PrintService:
                     return dict(request_id=request_id, scan_id=row['id'], status='sent', duplicate=True,
                                 message='งานนี้ส่งไปเครื่องพิมพ์แล้ว ไม่ส่งซ้ำ')
                 config = read_config(self.config_path)
-                if not config['enabled']: raise PrinterError('ยังไม่ได้ตั้งค่าเครื่องพิมพ์ USB ดู PRINTER_GUIDE_TH.md')
+                if not config['enabled']: raise PrinterError('ยังไม่ได้ตั้งค่าเครื่องพิมพ์ ดู PRINTER_GUIDE_TH.md')
                 commands = escpos_commands(self.preview(row), config['fragment_height'], config['feed_lines'])
                 digest = hashlib.sha256(b''.join(commands)).hexdigest()
                 db.execute('INSERT INTO print_jobs (request_id,scan_id,status,receipt_sha256) VALUES (?,?,?,?)',

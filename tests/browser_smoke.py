@@ -20,7 +20,7 @@ with sync_playwright() as playwright:
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.on("request", lambda request: external.append(request.url)
             if request.url.startswith("http") and not request.url.startswith("http://127.0.0.1:8765/") else None)
-    page.goto("http://127.0.0.1:8765", wait_until="networkidle")
+    page.goto("http://127.0.0.1:8765/lab", wait_until="networkidle")
     expect(page.locator("#pill-text")).to_have_text("โมเดลพร้อมใช้งาน")
     expect(page.locator("#quick-samples .sample-card")).to_have_count(6)
     expect(page.locator("#analyze-button")).to_be_disabled()

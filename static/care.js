@@ -100,7 +100,7 @@ window.PlantCare = (() => {
     if (count) count.textContent = `แสดง ${matches.length} จาก ${catalog.items.length} กลุ่ม · อ่านได้ออฟไลน์`;
     for (const advice of matches) {
       const card = node("article", undefined, "care-library-card");
-      card.append(node("span", advice.category, "care-tag"), node("h3", advice.title), node("p", advice.summary),
+      card.append(node("span", advice.category, "care-tag"), node("h3", advice.title), node("span", String(advice.disease_key || "").replace(/_/g," ").replace(/^./,c=>c.toUpperCase()), "care-english"), node("p", advice.summary),
         button("เปิดคู่มือ →", () => open(advice)));
       container.append(card);
     }

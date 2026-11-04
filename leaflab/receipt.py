@@ -11,7 +11,8 @@ from PIL import Image, ImageChops, ImageDraw
 from .dataset import ROOT
 from .care import advice_for_record
 
-FONT_PATH = ROOT / 'assets' / 'fonts' / 'NotoSansThai.ttf'
+# Looped Thai letterforms and regular body weight match familiar printed receipts.
+FONT_PATH = ROOT / 'assets' / 'fonts' / 'NotoSansThaiLooped.ttf'
 
 
 def clean_text(value):
@@ -114,9 +115,9 @@ def receipt_layout(row, width=384):
     """Return drawing operations; every text column is measured in native pixels."""
     if not 192 <= width <= 576 or width % 8:
         raise ValueError('ความกว้างใบผลตรวจต้องเป็น 192–576 จุด และหาร 8 ลงตัว')
-    fonts = dict(brand=ThaiFont(26,weight=700), title=ThaiFont(23,weight=600),
-                 result=ThaiFont(29,weight=700), body=ThaiFont(22,weight=550),
-                 strong=ThaiFont(22,weight=650), small=ThaiFont(19,weight=500))
+    fonts = dict(brand=ThaiFont(26,weight=700), title=ThaiFont(23,weight=400),
+                 result=ThaiFont(29,weight=700), body=ThaiFont(22,weight=400),
+                 strong=ThaiFont(22,weight=700), small=ThaiFont(19,weight=400))
     margin = 16 if width >= 320 else 12
     right = width - margin
     content = right - margin

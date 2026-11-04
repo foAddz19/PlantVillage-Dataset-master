@@ -9,5 +9,7 @@
   "timeout_ms": 5000,
   "fragment_height": 64,
   "pause_ms": 100,
-  "feed_lines": 4
+  "feed_lines": 4,
+  "transport": "usb",
+  "printer_name": null
 }

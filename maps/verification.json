@@ -1,0 +1,166 @@
+{
+  "valid": true,
+  "issues": [],
+  "atlas_bytes": 6233706496,
+  "atlas_sha256": "73e2a2c5aefa128f10e89c18d1e058b55943787910bc05f0472ad7a2856e9c4f",
+  "tiles_by_zoom": {
+    "7": 6,
+    "8": 20,
+    "9": 56,
+    "10": 210,
+    "11": 754,
+    "12": 2912,
+    "13": 11544,
+    "14": 45747,
+    "15": 181720,
+    "16": 725175
+  },
+  "formats": {
+    "PNG": 968144
+  },
+  "metadata": {
+    "name": "AI Plant · ถนนละเอียด ภาคตะวันออกเฉียงเหนือ",
+    "bounds": [
+      100.82326499999999,
+      14.1103894,
+      105.64681200000001,
+      18.458611
+    ],
+    "minzoom": 7,
+    "maxzoom": 16,
+    "tile_size": 256,
+    "format": "png"
+  },
+  "coverage_verification": {
+    "provinces": 20,
+    "province_iso_codes": [
+      "TH-30",
+      "TH-31",
+      "TH-32",
+      "TH-33",
+      "TH-34",
+      "TH-35",
+      "TH-36",
+      "TH-37",
+      "TH-38",
+      "TH-39",
+      "TH-40",
+      "TH-41",
+      "TH-42",
+      "TH-43",
+      "TH-44",
+      "TH-45",
+      "TH-46",
+      "TH-47",
+      "TH-48",
+      "TH-49"
+    ],
+    "all_province_bounds_inside_package": true,
+    "complete_tiles_by_zoom": {
+      "7": {
+        "tiles": 6,
+        "complete_rectangle": true
+      },
+      "8": {
+        "tiles": 20,
+        "complete_rectangle": true
+      },
+      "9": {
+        "tiles": 56,
+        "complete_rectangle": true
+      },
+      "10": {
+        "tiles": 210,
+        "complete_rectangle": true
+      },
+      "11": {
+        "tiles": 754,
+        "complete_rectangle": true
+      },
+      "12": {
+        "tiles": 2912,
+        "complete_rectangle": true
+      },
+      "13": {
+        "tiles": 11544,
+        "complete_rectangle": true
+      },
+      "14": {
+        "tiles": 45747,
+        "complete_rectangle": true
+      },
+      "15": {
+        "tiles": 181720,
+        "complete_rectangle": true
+      },
+      "16": {
+        "tiles": 725175,
+        "complete_rectangle": true
+      }
+    }
+  },
+  "road_classes": {
+    "bridleway": 1,
+    "cycleway": 159,
+    "footway": 15712,
+    "living_street": 11,
+    "motorway": 497,
+    "motorway_link": 163,
+    "path": 3657,
+    "pedestrian": 145,
+    "primary": 5229,
+    "primary_link": 2093,
+    "residential": 436750,
+    "secondary": 6629,
+    "secondary_link": 1194,
+    "service": 231992,
+    "steps": 957,
+    "tertiary": 10295,
+    "tertiary_link": 342,
+    "track": 97771,
+    "trunk": 8919,
+    "trunk_link": 4128,
+    "unclassified": 33995
+  },
+  "native_minor_road_examples": [
+    {
+      "category": "track",
+      "osm_way_id": 24549026,
+      "lon": 102.79835749028376,
+      "lat": 16.354417271600067,
+      "native_tile_contains_rendered_features": true
+    },
+    {
+      "category": "service",
+      "osm_way_id": 23748064,
+      "lon": 104.68419654606947,
+      "lat": 14.400682299961366,
+      "native_tile_contains_rendered_features": true
+    },
+    {
+      "category": "residential",
+      "osm_way_id": 22277488,
+      "lon": 102.4936371347419,
+      "lat": 15.219492844703709,
+      "native_tile_contains_rendered_features": true
+    },
+    {
+      "category": "unclassified",
+      "osm_way_id": 23730986,
+      "lon": 102.7832093287468,
+      "lat": 17.8829272189279,
+      "native_tile_contains_rendered_features": true
+    },
+    {
+      "category": "path",
+      "osm_way_id": 22764700,
+      "lon": 101.3698698973813,
+      "lat": 14.475156737201536,
+      "native_tile_contains_rendered_features": true
+    }
+  ],
+  "source_timestamp": "2026-11-02T21:21:26Z",
+  "validation_seconds": 329.48,
+  "compressed_source_bytes": 92407303,
+  "compressed_source_sha256": "cfb92072d7406e4eac67b5332a99c415afe35c802a7db0d494ca4e4f6f7a5733"
+}

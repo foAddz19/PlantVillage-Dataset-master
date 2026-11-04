@@ -1,4 +1,4 @@
-"""Configure a USB ESC/POS printer, preview Thai receipts, or explicitly test-print."""
+"""Configure USB or Windows RAW printing, preview receipts, or explicitly test-print."""
 import argparse
 import json
 import os
@@ -49,7 +49,7 @@ def configure_usb(records, destination, vendor=None, product=None, replace=False
     selected=records[0]
     if destination.exists() and not replace: raise ValueError('มี config อยู่แล้ว ใช้ --replace เฉพาะเมื่อต้องการตั้งค่าใหม่')
     config=json.loads((ROOT/'config'/'printer.example.json').read_text(encoding='utf-8'))
-    config.update({k:selected[k] for k in ('vendor_id','product_id','interface','out_endpoint')},enabled=True)
+    config.update({k:selected[k] for k in ('vendor_id','product_id','interface','out_endpoint')},enabled=True,transport='usb',printer_name=None)
     destination.parent.mkdir(parents=True,exist_ok=True)
     temporary=destination.with_suffix('.tmp');temporary.write_text(json.dumps(config,indent=2)+'\n',encoding='utf-8');os.replace(temporary,destination)
     vendor_hex=f'{usb_id(selected["vendor_id"]):04x}';product_hex=f'{usb_id(selected["product_id"]):04x}'
@@ -58,17 +58,41 @@ def configure_usb(records, destination, vendor=None, product=None, replace=False
     return rule_path
 
 
+def configure_windows(records, destination, name, replace=False):
+    if len([r for r in records if r['name'] == name]) != 1:
+        raise ValueError('ไม่พบชื่อคิว Windows ตรงกัน ให้เลือกชื่อจาก list-windows')
+    if destination.exists() and not replace:
+        raise ValueError('มี config อยู่แล้ว ใช้ --replace เฉพาะเมื่อต้องการตั้งค่าใหม่')
+    config = json.loads((ROOT/'config'/'printer.example.json').read_text(encoding='utf-8'))
+    config.update(enabled=True, transport='windows_raw', printer_name=name,
+                  vendor_id=None, product_id=None, serial_number=None, interface=None, out_endpoint=None)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_suffix('.tmp')
+    temporary.write_text(json.dumps(config, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
+    os.replace(temporary, destination)
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config',type=Path,default=ROOT/'config'/'printer.json')
     commands=parser.add_subparsers(dest='action',required=True)
     commands.add_parser('list-usb')
+    commands.add_parser('list-windows')
+    windows=commands.add_parser('configure-windows')
+    windows.add_argument('--printer-name',required=True);windows.add_argument('--replace',action='store_true')
     configure=commands.add_parser('configure-usb')
     configure.add_argument('--vendor-id');configure.add_argument('--product-id');configure.add_argument('--replace',action='store_true')
     preview=commands.add_parser('preview-demo');preview.add_argument('--output',type=Path,default=ROOT/'runtime'/'receipt-demo.png')
     commands.add_parser('test-print')
     args=parser.parse_args()
     try:
+        if args.action in ('list-windows','configure-windows'):
+            from leaflab.windows_printer import list_windows_printers
+            records=list_windows_printers()
+            if args.action=='list-windows':
+                print(json.dumps(records,ensure_ascii=False,indent=2));return
+            configure_windows(records,args.config,args.printer_name,args.replace)
+            print('Saved:',args.config);return
         if args.action=='list-usb':
             print(json.dumps(discover_usb(),indent=2));return
         if args.action=='configure-usb':

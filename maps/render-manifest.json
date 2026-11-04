@@ -1,0 +1,45 @@
+{
+  "file": "maps/current.mbtiles",
+  "bytes": 6233706496,
+  "tiles": 968144,
+  "seconds": 1560.38,
+  "sha256": "73e2a2c5aefa128f10e89c18d1e058b55943787910bc05f0472ad7a2856e9c4f",
+  "metadata": {
+    "name": "AI Plant · ถนนละเอียด ภาคตะวันออกเฉียงเหนือ",
+    "type": "baselayer",
+    "version": "1.3",
+    "format": "png",
+    "scheme": "tms",
+    "minzoom": "7",
+    "maxzoom": "16",
+    "bounds": "100.82326499999999,14.1103894,105.64681200000001,18.458611",
+    "center": "103.2350385,16.2845002,14",
+    "attribution": "© OpenStreetMap contributors",
+    "attribution_url": "https://www.openstreetmap.org/copyright",
+    "license": "Underlying geographic data OpenStreetMap ODbL 1.0; bundled source.geojsonseq.gz",
+    "description": "Actual OSM major/minor roads, residential/service roads, farm tracks, paths, waterways and place names. No satellite imagery, invented farm entrances or routing.",
+    "tile_size": "256",
+    "source_timestamp": "2026-11-02T21:21:26Z",
+    "source": "https://download.geofabrik.de/asia/thailand.html",
+    "source_sha256": "ad4a11a4632397ae7f6fe9f9d02ed8852b695ea6db4f3ad61acbf7ecffbfa64b"
+  },
+  "tiles_by_zoom": {
+    "7": 6,
+    "8": 20,
+    "9": 56,
+    "10": 210,
+    "11": 754,
+    "12": 2912,
+    "13": 11544,
+    "14": 45747,
+    "15": 181720,
+    "16": 725175
+  },
+  "workers": 2,
+  "method": "disk-backed feature RTree, 8x8 metatiles, native AGG antialiased paths and 2x shaped Thai labels, PNG lossless, resumable transactions, CPU affinity 2 below normal",
+  "main_process_memory_mib": {
+    "current": 48.62,
+    "peak": 74.09
+  },
+  "memory_scope": "Recorded renderer RAM is the main process only, excludes worker processes, browser and Pi runtime. PC preparation only."
+}

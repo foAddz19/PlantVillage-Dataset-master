@@ -1,0 +1,1 @@
+Rice specimen: Paddy Disease Classification dataset, train_images/normal/100002.jpg. Decorative illustration only; never passed as a live analysis or used to display invented scores. All assets served locally.

@@ -15,20 +15,28 @@ def build(output):
     if not model.is_relative_to(ROOT/'models'/'paddy') or hashlib.sha256(model.read_bytes()).hexdigest()!=config['sha256']:
         raise ValueError('Paddy model path/hash mismatch')
     required=['app.py','start_pi.sh','requirements-pi.txt','requirements-printer.txt','printer_tools.py',
-              'benchmark_paddy.py','CARE_GUIDE_TH.md','PADDY_GUIDE_TH.md','PADDY_MODEL_REPORT_TH.md','PRINTER_GUIDE_TH.md',
-              'PADDY_OPTIMIZATION_REPORT_TH.md',
+              'benchmark_paddy.py','UI_GUIDE_TH.md','DEVICE_GUIDE_TH.md','CARE_GUIDE_TH.md','PADDY_GUIDE_TH.md','PADDY_MODEL_REPORT_TH.md','PRINTER_GUIDE_TH.md',
+              'PADDY_OPTIMIZATION_REPORT_TH.md','OFFLINE_MAP_GUIDE_TH.md','offline_map_tools.py',
+              'maps/current.mbtiles','maps/README-SOURCE.txt','maps/source-manifest.json','maps/ODbL-1.0.txt',
               'config/printer.example.json','models/paddy/model.json',model.relative_to(ROOT).as_posix(),
               'leaflab/care.py','leaflab/care_knowledge.json','static/care.js','static/care.css']
     files={ROOT/name for name in required}
     for folder in ('leaflab','templates','static','assets/fonts'):
         files.update(p for p in (ROOT/folder).rglob('*') if p.is_file() and '__pycache__' not in p.parts and p.suffix!='.pyc')
     for name in ('paddy-prediction.png','paddy-report.png','paddy-mobile.png','paddy-benchmark-windows.json','receipt-demo.png',
-                 'care-guide-desktop.png','care-receipt.png',
+                 'care-guide-desktop.png','care-receipt.png','receipt-font-preview.png',
                  'paddy-optimized-test.json','paddy-optimized-validation.json','paddy-optimized-float-test.json',
                  'paddy-optimized-benchmark-windows.json','paddy-baseline-benchmark-windows.json',
                  'paddy-optimization-selection.json','paddy-optimization-history.json','paddy-optimization-release.json'):
         optional=ROOT/'test-results'/name
         if optional.is_file():files.add(optional)
+    # Ship only the active map and its provenance; exclude unrelated personal map backups.
+    for name in ('render-manifest.json','verification.json','source.geojsonseq.gz','province-boundaries.osm.json.gz'):
+        item=ROOT/'maps'/name
+        if item.is_file():files.add(item)
+    for name in ('offline-map-desktop.png','offline-map-pi-screen.png','offline-map-mobile.png','offline-map-browser.json','offline-map-release.json','offline-map-isan-preview.png','offline-map-runtime-windows.json','offline-map-z16-desktop.png','offline-map-z16-pi-screen.png','offline-map-z16-mobile.png','offline-map-detailed-release.json','offline-map-detail-comparison.png','offline-map-z16-roi-et.png'):
+        item=ROOT/'test-results'/name
+        if item.is_file():files.add(item)
     if not all(p.is_file() for p in files):raise ValueError('Missing deployment files')
     output=Path(output).resolve();output.parent.mkdir(parents=True,exist_ok=True)
     temporary=output.with_suffix('.tmp')
@@ -43,6 +51,10 @@ def build(output):
   .venv/bin/python -m pip install -r requirements-pi.txt
   sh start_pi.sh
 เปิด Chromium บน Pi ที่ http://127.0.0.1:8765/device
+UI ใหม่: เริ่มตรวจโรคข้าว > เปิดกล้อง > ถ่ายภาพ > วิเคราะห์โรค > บันทึกผล > พิมพ์ผล อ่าน UI_GUIDE_TH.md
+รองรับจอ 800×480 และโหมดมืด ไม่วิเคราะห์อัตโนมัติจากภาพสด
+แผนที่ถนนละเอียดออฟไลน์อีสานซูม 7–16: นำ maps/ ไปด้วย เปิดแท็บแผนที่จุดตรวจแล้วกดดูพื้นที่แผนที่ ไม่ต้องเชื่อมอินเทอร์เน็ต
+ขอบเขต/ระดับซูม/แหล่งข้อมูลแผนที่: อ่าน OFFLINE_MAP_GUIDE_TH.md และ maps/README-SOURCE.txt
 ผล Optimize โมเดลและขอบเขตการวัด: อ่าน PADDY_OPTIMIZATION_REPORT_TH.md
 หากอัปเดตเครื่องเดิม ให้คงโฟลเดอร์ data/ และ config/printer.json ของเครื่องนั้นไว้ แล้วเริ่มแอปใหม่
 ลบข้อมูลทีละรายการ: ประวัติ > ลบรายการนี้ > ตรวจภาพ/วันเวลา > ยืนยันลบรายการนี้ (ไม่มีปุ่มลบทั้งหมด)

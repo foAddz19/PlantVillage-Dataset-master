@@ -4,3 +4,5 @@ uharfbuzz==0.57.0
 freetype-py==2.5.1
 regex==2026.9.29
 budoux==0.10.2
+# Windows spooler only; skipped automatically on Raspberry Pi/Linux.
+pywin32==312; sys_platform == "win32"

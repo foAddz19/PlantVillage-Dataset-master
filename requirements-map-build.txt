@@ -1,0 +1,5 @@
+# PC-only additions to the normal app environment; not needed on Raspberry Pi.
+# Binary wheels; prepare geographic data on PC, ship only raster MBTiles to Pi.
+osmium==4.3.2
+shapely==2.1.2
+aggdraw==1.4.1
